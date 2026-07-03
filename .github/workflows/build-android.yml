@@ -10,7 +10,7 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - name: Checkout code
@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install system dependencies
         run: |
@@ -38,63 +38,99 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip buildozer cython kivy
+          python -m pip install --upgrade pip
+          pip install buildozer cython kivy==2.3.1
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK and NDK
         run: |
           mkdir -p $HOME/android-sdk
           cd $HOME/android-sdk
+          
+          # Download Android command-line tools
           curl -sL -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -qo cmdline-tools.zip
-          mkdir -p cmdline-tools
-          mv cmdline-tools latest
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
           
-          # Accept SDK licenses by writing hash files
+          # Accept SDK licenses
           mkdir -p cmdline-tools/latest/licenses
-          printf '\n8933bad161af4178b1185d1a37fbf41ea5269c55\n' > cmdline-tools/latest/licenses/android-sdk-license
-          printf '\nd56f5187479451eabf01fb78af6dfcb131a64d1f\n' >> cmdline-tools/latest/licenses/android-sdk-license
-          printf '\n84831b9409646a918e30573bab4c9c91346d8abd\n' >> cmdline-tools/latest/licenses/android-sdk-license
+          printf '\n8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a64d1f\n84831b9409646a918e30573bab4c9c91346d8abd\n' > cmdline-tools/latest/licenses/android-sdk-license
           
           export ANDROID_HOME=$HOME/android-sdk
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
           
-          # Install required SDK packages using full path
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+          # Install SDK packages
+          yes | sdkmanager --licenses 2>/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
           
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/27.0.12077973" >> $GITHUB_ENV
 
       - name: Build APK with Buildozer
         run: |
           cd $GITHUB_WORKSPACE/project/android_version
+          
+          # Create a proper buildozer.spec
+          cat > buildozer.spec << 'EOF'
+[app]
+title = yfinance Watchlist
+package.name = watchlist
+package.domain = org.sapiensai
+source.dir = .
+source.include_exts = py,json
+version = 1.0.0
+requirements = python3,kivy==2.3.1,yfinance
+android.api = 34
+android.minapi = 24
+android.ndk = 27b
+android.ndk_api = 24
+android.archs = arm64-v8a
+orientation = portrait
+fullscreen = 0
+log_level = 2
+warn_on_root = 0
+EOF
+
           export ANDROID_HOME=$HOME/android-sdk
           export ANDROID_SDK_ROOT=$HOME/android-sdk
-          export ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/25.2.9519653
-          buildozer android debug 2>&1 | tee /tmp/build.log | tail -100
-        env:
-          ANDROID_HOME: $HOME/android-sdk
-          ANDROID_SDK_ROOT: $HOME/android-sdk
-          ANDROID_NDK_ROOT: $HOME/android-sdk/ndk/25.2.9519653
+          export ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/27.0.12077973
+          
+          # Clean build
+          buildozer android clean 2>/dev/null || true
+          
+          # Build
+          buildozer android debug 2>&1 | tee /tmp/build.log
 
-      - name: Find and upload APK
+      - name: Find APK files
+        run: |
+          echo "=== Searching for APK ==="
+          echo "Looking in project/android_version/bin/"
+          find $GITHUB_WORKSPACE/project/android_version -name "*.apk" -type f 2>/dev/null
+          echo "Looking in .buildozer"
+          find $HOME/.buildozer -name "*.apk" -type f 2>/dev/null
+          echo "Looking in home"
+          find $HOME -maxdepth 4 -name "*.apk" -type f 2>/dev/null
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: watchlist-apk
           path: |
             $GITHUB_WORKSPACE/project/android_version/bin/*.apk
-            $HOME/.buildozer/android/platform/build-*/dists/*/build/outputs/apk/**/*.apk
-            $HOME/.buildozer/android/app/build/outputs/apk/**/*.apk
-          retention-days: 14
+            $HOME/.buildozer/android/platform/build-*/dists/**/*.apk
+          retention-days: 30
           if-no-files-found: warn
 
-      - name: Debug APK location on failure
+      - name: Debug on failure
         if: failure()
         run: |
-          echo "=== Looking for APK files ==="
-          find $HOME -name "*.apk" 2>/dev/null | head -20
-          ls -la $GITHUB_WORKSPACE/project/android_version/bin/ 2>/dev/null || echo "bin/ not found"
-          ls -la $HOME/.buildozer/android/platform/ 2>/dev/null || echo ".buildozer/platform/ not found"
-          echo "=== Build log ==="
-          cat /tmp/build.log 2>/dev/null | tail -100
+          echo "=== Build log tail ==="
+          tail -200 /tmp/build.log 2>/dev/null || true
+          echo "=== APK search ==="
+          find $HOME -name "*.apk" -type f 2>/dev/null | head -20
+          echo "=== .buildozer structure ==="
+          ls -la $HOME/.buildozer/android/platform/ 2>/dev/null || echo "No .buildozer/platform"
+          echo "=== dists ==="
+          find $HOME/.buildozer -name "dists" -type d 2>/dev/null
+          find $HOME/.buildozer -name "*.apk" 2>/dev/null
