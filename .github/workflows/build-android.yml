@@ -40,7 +40,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip buildozer cython kivy
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK and accept licenses
         run: |
           mkdir -p $HOME/android-sdk
           cd $HOME/android-sdk
@@ -48,10 +48,19 @@ jobs:
           unzip -q cmdline-tools.zip
           mkdir -p cmdline-tools
           mv cmdline-tools latest
+          
+          # Accept all SDK licenses
+          mkdir -p $HOME/android-sdk/cmdline-tools/latest/licenses
+          echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/android-sdk/cmdline-tools/latest/licenses/android-sdk-license
+          echo -e "\nd56f5187479451eabf01fb78af6dfcb131a64d1f" >> $HOME/android-sdk/cmdline-tools/latest/licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" >> $HOME/android-sdk/cmdline-tools/latest/licenses/android-sdk-license
+          
           export ANDROID_HOME=$HOME/android-sdk
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-          yes | sdkmanager --licenses 2>/dev/null || true
-          sdkmanager "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653" 2>/dev/null || true
+          
+          # Install required SDK packages
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+          
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/25.2.9519653" >> $GITHUB_ENV
@@ -62,20 +71,29 @@ jobs:
           export ANDROID_HOME=$HOME/android-sdk
           export ANDROID_SDK_ROOT=$HOME/android-sdk
           export ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/25.2.9519653
-          buildozer android debug 2>&1 | tee /tmp/build.log | tail -50
+          buildozer android debug 2>&1 | tee /tmp/build.log | tail -100
         env:
           ANDROID_HOME: $HOME/android-sdk
           ANDROID_SDK_ROOT: $HOME/android-sdk
           ANDROID_NDK_ROOT: $HOME/android-sdk/ndk/25.2.9519653
 
-      - name: Upload APK artifact
+      - name: Find and upload APK
         uses: actions/upload-artifact@v4
         with:
           name: watchlist-apk
-          path: $GITHUB_WORKSPACE/project/android_version/bin/*.apk
+          path: |
+            $GITHUB_WORKSPACE/project/android_version/bin/*.apk
+            $HOME/.buildozer/android/platform/build-*/dists/*/build/outputs/apk/**/*.apk
+            $HOME/.buildozer/android/app/build/outputs/apk/**/*.apk
           retention-days: 14
+          if-no-files-found: warn
 
-      - name: Show build log on failure
+      - name: Debug APK location on failure
         if: failure()
         run: |
-          cat /tmp/build.log 2>/dev/null || echo "No build log found"
+          echo "=== Looking for APK files ==="
+          find $HOME -name "*.apk" 2>/dev/null | head -20
+          ls -la $GITHUB_WORKSPACE/project/android_version/bin/ 2>/dev/null || echo "bin/ not found"
+          ls -la $HOME/.buildozer/android/platform/ 2>/dev/null || echo ".buildozer/platform/ not found"
+          echo "=== Build log ==="
+          cat /tmp/build.log 2>/dev/null | tail -100
