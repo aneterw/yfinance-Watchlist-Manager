@@ -75,17 +75,14 @@ jobs:
           export ANDROID_SDK_ROOT=$HOME/android-sdk
           export ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/27.0.12077973
           
-          # Clean build
-          buildozer android clean
-          
-          # Build with error handling
+          # Build directly (no clean first to avoid FileNotFoundError)
           set -e
-          buildozer android debug
+          buildozer android debug 2>&1 | tee /tmp/build.log
           
           # Show what was built
           echo "=== Build output ==="
           ls -la bin/ 2>/dev/null || echo "No bin directory"
-          find . -name "*.apk" -type f
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
 
       - name: Find APK files
         run: |
@@ -111,7 +108,7 @@ jobs:
         if: failure()
         run: |
           echo "=== Build log tail ==="
-          tail -200 /tmp/build.log 2>/dev/null || true
+          tail -200 /tmp/build.log 2>/dev/null || echo "No build log found"
           echo "=== APK search ==="
           find $HOME -name "*.apk" -type f 2>/dev/null | head -20
           echo "=== .buildozer structure ==="
