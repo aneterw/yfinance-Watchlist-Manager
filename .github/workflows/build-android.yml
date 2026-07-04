@@ -76,10 +76,16 @@ jobs:
           export ANDROID_NDK_ROOT=$HOME/android-sdk/ndk/27.0.12077973
           
           # Clean build
-          buildozer android clean 2>/dev/null || true
+          buildozer android clean
           
-          # Build
-          buildozer android debug 2>&1 | tee /tmp/build.log
+          # Build with error handling
+          set -e
+          buildozer android debug
+          
+          # Show what was built
+          echo "=== Build output ==="
+          ls -la bin/ 2>/dev/null || echo "No bin directory"
+          find . -name "*.apk" -type f
 
       - name: Find APK files
         run: |
