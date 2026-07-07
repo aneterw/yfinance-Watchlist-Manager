@@ -1,0 +1,9 @@
+{
+  "tickers": [
+    ["Apple - AAPL", "AAPL", "Apple"],
+    ["Microsoft - MSFT", "MSFT", "Microsoft"],
+    ["台積電 - 2330.TW", "2330.TW", "台積電"],
+    ["騰訊 - 0700.HK", "0700.HK", "騰訊"],
+    ["中國平安 - 601318.SS", "601318.SS", "中國平安"]
+  ]
+}

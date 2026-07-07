@@ -12,13 +12,17 @@ yfinance Watchlist Manager
 """
 
 import tkinter as tk
+import pandas as pd
+import re
+from typing import Any, List, Tuple, Dict, Optional
+
 from tkinter import ttk, messagebox, simpledialog
 import yfinance as yf
-import threading
 import math
 import datetime
 import json
 import os
+import threading
 
 SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchlist_data.json")
 
@@ -36,38 +40,25 @@ DEFAULT_WATCHLISTS = {
 }
 
 COMMON_TICKERS = [
-    ("AAPL","AAPL","Apple"),("MSFT","MSFT","Microsoft"),("GOOGL","GOOGL","Alphabet"),
-    ("AMZN","AMZN","Amazon"),("NVDA","NVDA","NVIDIA"),("META","META","Meta"),
-    ("TSLA","TSLA","Tesla"),("BRK-B","BRK-B","Berkshire"),("LLY","LLY","Eli Lilly"),
-    ("AVGO","AVGO","Broadcom"),("JPM","JPM","JPMorgan"),("V","V","Visa"),
-    ("JNJ","JNJ","J&J"),("WMT","WMT","Walmart"),("XOM","XOM","Exxon"),
-    ("PG","PG","P&G"),("MA","MA","Mastercard"),("HD","HD","Home Depot"),
-    ("CVX","CVX","Chevron"),("MRK","MRK","Merck"),("KO","KO","Coca-Cola"),
-    ("PEP","PEP","PepsiCo"),("COST","COST","Costco"),("ADBE","ADBE","Adobe"),
-    ("MCD","MCD","McDonald's"),("CSCO","CSCO","Cisco"),("ACN","ACN","Accenture"),
-    ("NKE","NKE","Nike"),("TMO","TMO","Thermo Fisher"),("LIN","LIN","Linde"),
-    ("TMUS","TMUS","T-Mobile"),("VZ","VZ","Verizon"),("INTC","INTC","Intel"),
-    ("QCOM","QCOM","Qualcomm"),("TXN","TXN","Texas Inst"),("HON","HON","Honeywell"),
-    ("2330.TW","2330.TW","台積電"),("2317.TW","2317.TW","鴻海"),("2454.TW","2454.TW","聯發科"),
-    ("2382.TW","2382.TW","廣達"),("2881.TW","2881.TW","富邦金"),("2882.TW","2882.TW","國泰金"),
-    ("3711.TW","3711.TW","日月光"),("2409.TW","2409.TW","友達"),("3481.TW","3481.TW","群創"),
-    ("0700.HK","0700.HK","騰訊"),("9988.HK","9988.HK","阿里巴巴"),
-    ("00941.HK","00941.HK","中國移動"),("00939.HK","00939.HK","建設銀行"),
-    ("601318.SS","601318.SS","中國平安"),("600519.SS","600519.SS","貴州茅台"),
-    ("000858.SZ","000858.SZ","五糧液"),("002594.SZ","002594.SZ","比亞迪"),
-    ("601398.SS","601398.SS","工商銀行"),("601899.SS","601899.SS","紫金礦業"),
-    ("03690.HK","03690.HK","美團"),("01810.HK","01810.HK","小米"),
-    ("09618.HK","09618.HK","京東"),("00388.HK","00388.HK","港交所"),
-    ("00005.HK","00005.HK","匯豐"),("601857.SS","601857.SS","中石油"),
-    ("GC=F","GC=F","Gold"),("SI=F","SI=F","Silver"),("CL=F","CL=F","Crude Oil"),
-    ("NG=F","NG=F","NatGas"),("HG=F","HG=F","Copper"),("GLD","GLD","GLD ETF"),
-    ("SLV","SLV","SLV ETF"),("USO","USO","USO ETF"),
-    ("EURUSD=X","EURUSD=X","EUR/USD"),("USDJPY=X","USDJPY=X","USD/JPY"),
-    ("USDCNY=X","USDCNY=X","USD/CNY"),("USDHKD=X","USDHKD=X","USD/HKD"),
-    ("USDTWD=X","USDTWD=X","USD/TWD"),("USDKRW=X","USDKRW=X","USD/KRW"),
-    ("BTC-USD","BTC-USD","Bitcoin"),("ETH-USD","ETH-USD","Ethereum"),
-    ("^TNX","^TNX","US 10Y"),("^VIX","^VIX","VIX"),
+    # US Large‑Cap equities
+    ("AAPL","AAPL","Apple"),("MSFT","MSFT","Microsoft"),("GOOGL","GOOGL","Alphabet"),("GOOG","GOOG","Alphabet C"),("AMZN","AMZN","Amazon"),("NVDA","NVDA","NVIDIA"),("META","META","Meta"),("TSLA","TSLA","Tesla"),("BRK-A","BRK-A","Berkshire A"),("BRK-B","BRK-B","Berkshire B"),("LLY","LLY","Eli Lilly"),("AVGO","AVGO","Broadcom"),("JPM","JPM","JPMorgan"),("V","V","Visa"),("JNJ","JNJ","J&J"),("WMT","WMT","Walmart"),("XOM","XOM","Exxon"),("PG","PG","P&G"),("MA","MA","Mastercard"),("HD","HD","Home Depot"),("CVX","CVX","Chevron"),("MRK","MRK","Merck"),("KO","KO","Coca-Cola"),("PEP","PEP","PepsiCo"),("COST","COST","Costco"),("ADBE","ADBE","Adobe"),("MCD","MCD","McDonald's"),("CSCO","CSCO","Cisco"),("ACN","ACN","Accenture"),("NKE","NKE","Nike"),("TMO","TMO","Thermo Fisher"),("LIN","LIN","Linde"),("TMUS","TMUS","T-Mobile"),("VZ","VZ","Verizon"),("INTC","INTC","Intel"),("QCOM","QCOM","Qualcomm"),("TXN","TXN","Texas Instruments"),("HON","HON","Honeywell"),
+    # US ETFs & indices
+    ("SPY","SPY","SPDR S&P 500"),("QQQ","QQQ","Invesco QQQ"),("VGT","VGT","Vanguard Info Tech"),("IWM","IWM","iShares Russell 2000"),("EFA","EFA","iShares MSCI EAFE"),("EEM","EEM","iShares MSCI Emerging Markets"),("XLK","XLK","Technology Select SPDR"),("XLF","XLF","Financial Select SPDR"),
+    # Asian equities
+    ("2330.TW","2330.TW","台積電"),("2317.TW","2317.TW","鴻海"),("2454.TW","2454.TW","聯發科"),("2382.TW","2382.TW","廣達"),("2881.TW","2881.TW","富邦金"),("2882.TW","2882.TW","國泰金"),("3711.TW","3711.TW","日月光"),("2409.TW","2409.TW","友達"),("3481.TW","3481.TW","群創"),("2456.TW","2456.TW","台泥"),("2303.TW","2303.TW","聯電"),("1301.TW","1301.TW","台塑"),
+    ("0700.HK","0700.HK","騰訊"),("9988.HK","9988.HK","阿里巴巴"),("00941.HK","00941.HK","中國移動"),("00939.HK","00939.HK","建設銀行"),("03690.HK","03690.HK","美團"),("01810.HK","01810.HK","小米"),("09618.HK","09618.HK","京東"),("00388.HK","00388.HK","港交所"),("00005.HK","00005.HK","匯豐"),
+    # Chinese A‑shares
+    ("601318.SS","601318.SS","中國平安"),("600519.SS","600519.SS","貴州茅台"),("000858.SZ","000858.SZ","五糧液"),("002594.SZ","002594.SZ","比亞迪"),("601398.SS","601398.SS","工商銀行"),("601899.SS","601899.SS","紫金礦業"),("601857.SS","601857.SS","中石油"),
+    # Commodities & energy
+    ("GC=F","GC=F","Gold"),("SI=F","SI=F","Silver"),("CL=F","CL=F","Crude Oil"),("NG=F","NG=F","Natural Gas"),("HG=F","HG=F","Copper"),("BZ=F","BZ=F","Brent Crude"),("PL=F","PL=F","Platinum"),("GLD","GLD","GLD ETF"),("SLV","SLV","SLV ETF"),("USO","USO","USO ETF"),
+    # Forex pairs
+    ("EURUSD=X","EURUSD=X","EUR/USD"),("USDJPY=X","USDJPY=X","USD/JPY"),("GBPUSD=X","GBPUSD=X","GBP/USD"),("AUDUSD=X","AUDUSD=X","AUD/USD"),("USDCNY=X","USDCNY=X","USD/CNY"),("USDHKD=X","USDHKD=X","USD/HKD"),("USDTWD=X","USDTWD=X","USD/TWD"),("USDKRW=X","USDKRW=X","USD/KRW"),
+    # Cryptocurrencies
+    ("BTC-USD","BTC-USD","Bitcoin"),("ETH-USD","ETH-USD","Ethereum"),("ADA-USD","ADA-USD","Cardano"),("DOGE-USD","DOGE-USD","Dogecoin"),
+    # Fixed‑income & indices
+    ("^TNX","^TNX","US 10Y"),("^VIX","^VIX","VIX"),("^GSPC","^GSPC","S&P 500 Index"),("^FTSE","^FTSE","FTSE 100"),("^DAX","^DAX","DAX"),("^N225","^N225","Nikkei 225"),("^HSI","^HSI","Hang Seng Index"),
 ]
+
 
 LANG = {
     "app_title":    {"zh-TW":"yfinance 自選股管理器","zh-CN":"yfinance 自选股管理器","en":"yfinance Watchlist Manager","ja":"yfinance ウォッチリスト マネージャー","ko":"yfinance 관심종목 관리자","es":"yfinance Gestor de Lista"},
@@ -106,18 +97,19 @@ LANG = {
     "err_no_select":{"zh-TW":"請先在列表中點選一個項目","zh-CN":"请先在列表中点选一个项目","en":"Please select an item in the list","ja":"リストから項目を選択してください","ko":"목록에서 항목을 선택하세요","es":"Selecciona un elemento en la lista"},
 }
 
-def _init_lang():
+def _init_lang() -> None:
+    """Initialize language dict if needed – currently a no‑op because LANG defined earlier."""
     global LANG
-    pass  # already defined above
+    # No additional init required
 
-def t(key):
+def t(key: str) -> str:
     global LANG
     return LANG.get(key, {}).get(CURRENT_LANG, key)
 
 CURRENT_LANG = "zh-TW"
 CURRENT_THEME = "system"
 
-def _fmt_price(val):
+def _fmt_price(val: Any) -> str:
     if val is None or (isinstance(val, float) and math.isnan(val)):
         return "N/A"
     if isinstance(val, (int, float)):
@@ -141,35 +133,69 @@ def _fmt_vol(val):
 def _now_str():
     return datetime.datetime.now().strftime("%H:%M:%S")
 
+def _load_dynamic_tickers() -> list[tuple[str, str, str]]:
+    """Load ticker symbols from a local static file.
+    The file ``top250_tickers.json`` (placed next to this script) should contain a
+    JSON object with a ``"tickers"`` list of ``[display, ticker, name]`` entries.
+    If the file is missing or malformed, a minimal fallback from
+    ``fallback_tickers.json`` is used. No network access is performed.
+    Returns a list of ``(display, ticker, name)`` tuples.
+    """
+    import json, os
+    base_dir = os.path.dirname(__file__)
+    primary_path = os.path.join(base_dir, "top250_tickers.json")
+    # Try primary static file (expected to contain the full top‑250 lists)
+    if os.path.exists(primary_path):
+        try:
+            with open(primary_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            tickers = data.get("tickers", [])
+            if tickers:
+                print(f"[Dynamic] 使用本地 top250 檔案 ({len(tickers)} 條)")
+                return tickers
+        except Exception as e:
+            print("[Dynamic] 讀取 top250_tickers.json 失敗:", e)
+    # Fallback to tiny hard‑coded set stored in fallback_tickers.json
+    fallback_path = os.path.join(base_dir, "fallback_tickers.json")
+    try:
+        with open(fallback_path, "r", encoding="utf-8") as f:
+            fb = json.load(f)
+        tickers = fb.get("tickers", [])
+        print(f"[Dynamic] 使用備援檔案 ({len(tickers)} 條)")
+        return tickers
+    except Exception as e:
+        print("[Dynamic] 讀取備援檔案失敗:", e)
+        return []
+
+# Merge static COMMON_TICKERS with dynamic list (dynamic may contain duplicates)
+# Load dynamic tickers and report count
+DYNAMIC_TICKERS = _load_dynamic_tickers()
+print(f"Loaded {len(DYNAMIC_TICKERS)} dynamic tickers")
+ALL_TICKERS = COMMON_TICKERS + DYNAMIC_TICKERS
+
 def search_yfinance(query, limit=12):
     if not query or not query.strip():
         return []
     q = query.strip().upper()
     results = []
-    for _, tk_sym, nm in COMMON_TICKERS:
+    # Search combined static + dynamic list
+    for _, tk_sym, nm in ALL_TICKERS:
         if q == tk_sym.upper() or q == nm.upper():
             results.append((f"{tk_sym} - {nm}", tk_sym, nm))
     if results:
         return results[:limit]
-    for _, tk_sym, nm in COMMON_TICKERS:
+    for _, tk_sym, nm in ALL_TICKERS:
         if tk_sym.upper().startswith(q):
             results.append((f"{tk_sym} - {nm}", tk_sym, nm))
     if len(results) >= limit:
         return results[:limit]
-    for _, tk_sym, nm in COMMON_TICKERS:
+    for _, tk_sym, nm in ALL_TICKERS:
         if q in nm.upper():
             results.append((f"{tk_sym} - {nm}", tk_sym, nm))
     if len(results) >= limit:
         return results[:limit]
-    try:
-        srch = yf.search(q, max_results=limit)
-        if srch and "quotes" in srch and srch["quotes"]:
-            for item in srch["quotes"]:
-                sym = item.get("symbol", "")
-                nm = item.get("shortname") or item.get("longname") or sym
-                results.append((f"{sym} - {nm}", sym, nm))
-    except Exception as e:
-        print("yfinance search error:", e)
+    # Removed yfinance.search fallback because it raises 'module' object is not callable
+    # If needed, a proper API call can be added here.
     seen = set()
     uniq = []
     for r in results:
@@ -333,63 +359,55 @@ class ChartWindow:
             return "1mo", "30y"
 
     def _draw(self):
+        # Clear previous figure
         for w in self.fig_frame.winfo_children():
             w.destroy()
-        try:
+        # Run fetch in background thread to avoid UI freeze
+        def worker():
             interval, period = self._params()
-            raw = yf.Ticker(self.ticker).history(period=period, interval=interval)
+            try:
+                raw = yf.Ticker(self.ticker).history(period=period, interval=interval)
+            except Exception as e:
+                self.fig_frame.after(0, lambda: ttk.Label(self.fig_frame, text=f"{self.ticker}: fetch error {e}").pack(padx=20, pady=20))
+                return
             if raw is None or raw.empty:
-                ttk.Label(self.fig_frame, text=f"{self.ticker}: 無資料").pack(padx=20, pady=20)
+                self.fig_frame.after(0, lambda: ttk.Label(self.fig_frame, text=f"{self.ticker}: 無資料").pack(padx=20, pady=20))
                 return
             raw = raw.tail(200)
-
-            def _to_date(x):
-                if hasattr(x, "strftime"):
-                    return x.strftime("%Y-%m-%d")
-                return str(x)
-            dates = [_to_date(x) for x in raw.index]
+            dates = [d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d) for d in raw.index]
             n = len(raw)
             xpos = list(range(n))
-
+            # Convert series safely
             def _safe(series):
                 try:
                     s = self._pd.to_numeric(series, errors="coerce")
                     return s.fillna(0).values
                 except Exception:
                     return [0.0] * n
-
             o = _safe(raw["Open"]); h = _safe(raw["High"]); l = _safe(raw["Low"])
             c = _safe(raw["Close"]); v = _safe(raw["Volume"])
             eps = 1e-9
-
             is_dark = (self.theme_mode == "dark")
             bg = "#1a1a1a" if is_dark else "#ffffff"
             grid_c = "#333333" if is_dark else "#cccccc"
             txt_c = "#929292" if is_dark else "#333333"
             up_c = "#ff6666" if is_dark else "#cc0000"
             dn_c = "#66ff66" if is_dark else "#006600"
-
             fig = self._Figure(figsize=(11, 6.5), dpi=100)
             fig.patch.set_facecolor(bg)
-
-            # 3 子圖：K線(上) / 成交量(中) / KD(下+X軸)
             ax_k = fig.add_axes([0.07, 0.40, 0.90, 0.36])
             ax_v = fig.add_axes([0.07, 0.29, 0.90, 0.10], sharex=ax_k)
             ax_kd = fig.add_axes([0.07, 0.08, 0.90, 0.19], sharex=ax_k)
-
             for ax in (ax_k, ax_v, ax_kd):
-               ax.set_facecolor(bg)
-               ax.grid(True, color=grid_c, linestyle="--", linewidth=0.4)
-               for sp in ax.spines.values():
-                   sp.set_edgecolor(grid_c)
-
+                ax.set_facecolor(bg)
+                ax.grid(True, color=grid_c, linestyle="--", linewidth=0.4)
+                for sp in ax.spines.values():
+                    sp.set_edgecolor(grid_c)
             title = f"{self.ticker}  {self.name}  [{self.period_var.get().upper()} CHART]"
             ax_k.set_title(title, color=txt_c, fontsize=11, fontweight="bold", loc="left")
             ax_k.set_ylabel("Price", color=txt_c, fontsize=8)
             ax_k.tick_params(colors=txt_c, labelsize=7, left=True, bottom=False, labelbottom=False)
             ax_k.set_xlim(-0.5, n - 0.5)
-
-            # K 線
             for i in range(n):
                 oi, hi, li, ci = o[i], h[i], l[i], c[i]
                 col = up_c if ci >= oi else dn_c
@@ -402,8 +420,7 @@ class ChartWindow:
                     d = max(abs(oi) * 0.005, eps)
                     bot -= d / 2; top += d / 2
                 ax_k.bar(i, top - bot, bottom=bot, width=0.52, color=col, edgecolor=col, linewidth=0.4)
-
-            # 成交量（np.array 確保永遠有 .max）
+            # Volume
             try:
                 v_arr = self._pd.to_numeric(v, errors="coerce")
                 if hasattr(v_arr, "values"):
@@ -418,17 +435,15 @@ class ChartWindow:
             ax_v.bar(xpos, vnorm, color=colors_v, width=0.6)
             ax_v.set_ylabel("Vol", color=txt_c, fontsize=6)
             ax_v.tick_params(colors=txt_c, labelsize=6, left=True, bottom=False, labelbottom=False)
-
             # KD
             low9 = self._pd.Series(l).rolling(9, min_periods=1).min().values
-            hi9  = self._pd.Series(h).rolling(9, min_periods=1).max().values
+            hi9 = self._pd.Series(h).rolling(9, min_periods=1).max().values
             denom = hi9 - low9
             rsv = self._pd.Series([50.0] * n)
             mask = denom != 0
             rsv[mask] = (self._pd.Series(c)[mask] - low9[mask]) / denom[mask] * 100
             k_arr = rsv.ewm(com=2, adjust=False).mean().values
             d_arr = self._pd.Series(k_arr).ewm(com=2, adjust=False).mean().values
-
             ax_kd.set_ylabel("KD", color=txt_c, fontsize=8)
             ax_kd.tick_params(colors=txt_c, labelsize=7)
             ax_kd.set_ylim(-10, 110)
@@ -437,21 +452,26 @@ class ChartWindow:
             ax_kd.plot(xpos, k_arr, color="#ff9900", linewidth=1.0, label="K")
             ax_kd.plot(xpos, d_arr, color="#3399ff", linewidth=1.0, label="D")
             ax_kd.legend(loc="upper left", fontsize=7, facecolor=bg, edgecolor=grid_c, labelcolor=txt_c)
-
-            # X 軸：最下層、橫列、不斜
             step = max(1, n // 8)
             xt = list(range(0, n, step))
             if not xt or xt[-1] != n - 1:
                 xt.append(n - 1)
             ax_kd.set_xticks(xt)
             ax_kd.set_xticklabels([dates[i] for i in xt], rotation=0, ha="center",
-                                  fontsize=7, color=txt_c)
-
+                                 fontsize=7, color=txt_c)
             canvas = self._FigureCanvasTkAgg(fig, master=self.fig_frame)
             canvas.draw()
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        except Exception as e:
-            ttk.Label(self.fig_frame, text=f"繪圖失敗: {e}").pack(padx=20, pady=20)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _params(self):
+        p = self.period_var.get()
+        if p == "day":
+            return "1d", "2y"
+        elif p == "week":
+            return "1wk", "10y"
+        else:
+            return "1mo", "30y"
 
 
 class WatchlistApp:
@@ -728,6 +748,24 @@ class WatchlistApp:
         self._refresh_items()
         self._save()
 
+    def _del_item(self):
+        """Remove selected ticker from current watchlist."""
+        if not self.active_wl:
+            return
+        sel = self.item_tree.selection()
+        if not sel:
+            messagebox.showinfo("提示", t("err_no_select"))
+            return
+        ticker = sel[0]
+        if not messagebox.askyesno("確認", f"確定從「{self.active_wl}」移除 {ticker}？"):
+            return
+        # filter out ticker
+        self.watchlists[self.active_wl] = [it for it in self.watchlists[self.active_wl] if it[1] != ticker]
+        self._refresh_wl_list()
+        self._refresh_items()
+        self._save()
+        self.status_var.set(f"已移除 {ticker}")
+
     def _schedule_search(self):
         if not self._search_enabled:
             return
@@ -768,11 +806,17 @@ class WatchlistApp:
             messagebox.showinfo("提示", t("err_no_wl"))
             return
         label, ticker, name = self._selected_res
+        if not self._valid_ticker(ticker):
+            messagebox.showwarning("錯誤", f"Ticker '{ticker}' 格式不正確")
+            return
         self._insert_item(label, ticker, name)
 
     def _insert_item(self, label, ticker, full_name):
         if not self.active_wl:
             messagebox.showinfo("提示", t("err_no_wl"))
+            return
+        if not self._valid_ticker(ticker):
+            messagebox.showwarning("錯誤", f"Ticker '{ticker}' 格式不正確")
             return
         items = self.watchlists[self.active_wl]
         if any(it[1] == ticker for it in items):
@@ -820,7 +864,9 @@ class WatchlistApp:
         dlg.bind("<Return>", lambda e: _ok())
         dlg.bind("<Escape>", lambda e: dlg.destroy())
 
-    def _del_item(self):
+    def _valid_ticker(self, ticker: str) -> bool:
+        """Basic validation: allow alphanumerics, dot, dash, underscore, up to 20 chars."""
+        return bool(re.fullmatch(r"[A-Za-z0-9._\-]{1,20}", ticker))
         if not self.active_wl:
             return
         sel = self.item_tree.selection()
