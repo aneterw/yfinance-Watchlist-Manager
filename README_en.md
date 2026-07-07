@@ -1,4 +1,4 @@
-### English | [中文](https://github.com/aneterw/yfinance-Watchlist-Manager/blob/main/README.md)
+### English | [<u>中文</u>](https://github.com/aneterw/yfinance-Watchlist-Manager/blob/main/README.md)
 
 # yfinance Watchlist Manager — User Guide
 
