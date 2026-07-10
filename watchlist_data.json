@@ -1,5 +1,5 @@
 {
-  "active_wl": "全球主要指數",
+  "active_wl": "科技股 ETF",
   "watchlists": {
     "全球主要指數": [
       [
@@ -67,5 +67,6 @@
     ]
   },
   "lang": "zh-TW",
-  "theme": "dark"
+  "theme": "dark",
+  "alerts": {}
 }

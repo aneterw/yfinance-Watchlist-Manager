@@ -23,8 +23,39 @@ import datetime
 import json
 import os
 import threading
+import subprocess
+
+# === Windows 系統通知 ===
+def _send_windows_notification(title: str, message: str):
+    """發送 Windows 系統通知"""
+    # 使用 PowerShell System.Windows.Forms.NotifyIcon（BalloonTip）
+    try:
+        ps_script = f'''
+Add-Type -AssemblyName System.Windows.Forms
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Information
+$notify.Visible = $true
+$notify.ShowBalloonTip(10000, "{title}", "{message}", [System.Windows.Forms.ToolTipIcon]::Info)
+Start-Sleep -Seconds 12
+$notify.Dispose()
+'''
+        subprocess.Popen(
+            ["powershell", "-Command", ps_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except Exception:
+        # 後備：使用音效
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        except Exception:
+            pass
 
 SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchlist_data.json")
+
+# 價格提醒設置：key=ticker, value={"high": float, "low": float, "high_triggered": bool, "low_triggered": bool}
+PRICE_ALERTS = {}
 
 DEFAULT_WATCHLISTS = {
     "全球主要指數": [
@@ -84,6 +115,7 @@ LANG = {
     "lbl_custom_name":{"zh-TW":"顯示名稱(選填)：","zh-CN":"显示名称(选填)：","en":"Label (optional):","ja":"表示名（任意）：","ko":"표시명 (선택사항):","es":"Etiqueta (opcional):"},
     "btn_add_selected":{"zh-TW":"＋ 加入所選","zh-CN":"＋ 加入所选","en":"+ Add Selected","ja":"＋ 選択を追加","ko":"＋ 선택 추가","es":"+ Agregar Seleccionado"},
     "btn_direct_input":{"zh-TW":"直接輸入 Ticker","zh-CN":"直接输入 Ticker","en":"Direct Input","ja":"ティッカー直接入力","ko":"티커 직접 입력","es":"Entrada Directa"},
+    "btn_set_alert":{"zh-TW":"⚙ 設定提醒","zh-CN":"⚙ 设定提醒","en":"⚙ Set Alert","ja":"⚙ アラート設定","ko":"⚙ 알림 설정","es":"⚙ Configurar Alerta"},
     "dlg_add_title":{"zh-TW":"新增商品","zh-CN":"新增商品","en":"Add Item","ja":"商品追加","ko":"종목 추가","es":"Agregar"},
     "dlg_ticker_hint":{"zh-TW":"Ticker（例 AAPL、BTC-USD、005930.KS、EURUSD=X）：","zh-CN":"Ticker（例 AAPL、BTC-USD、005930.KS、EURUSD=X）：","en":"Ticker (e.g. AAPL, BTC-USD):","ja":"ティッカー（例 AAPL、BTC-USD）：","ko":"티커 (예 AAPL, BTC-USD):","es":"Ticker (ej. AAPL, BTC-USD):"},
     "dlg_label_hint":{"zh-TW":"顯示名稱（可空白）：","zh-CN":"显示名称（可空白）：","en":"Label (optional):","ja":"表示名（空白可）：","ko":"표시명 (공백 가능):","es":"Etiqueta (opcional):"},
@@ -93,8 +125,35 @@ LANG = {
     "chart_month":{"zh-TW":"月線","zh-CN":"月线","en":"Month","ja":"月足","ko":"월봉","es":"Mes"},
     "theme_menu":{"zh-TW":"主題","zh-CN":"主题","en":"Theme","ja":"テーマ","ko":"테마","es":"Tema"},
     "lang_menu":{"zh-TW":"語言","zh-CN":"语言","en":"Language","ja":"言語","ko":"언어","es":"Idioma"},
+    "font_menu":{"zh-TW":"字體","zh-CN":"字体","en":"Font","ja":"フォント","ko":"글꼴","es":"Fuente"},
+    "font_family":{"zh-TW":"字體：","zh-CN":"字体：","en":"Font:","ja":"フォント：","ko":"글꼴:","es":"Fuente:"},
+    "font_size":{"zh-TW":"大小：","zh-CN":"大小：","en":"Size:","ja":"サイズ：","ko":"크기:","es":"Tamaño:"},
     "err_no_wl":{"zh-TW":"請先選擇一個 Watchlist","zh-CN":"请先选择一个 Watchlist","en":"Please select a Watchlist","ja":"Watchlist を選択してください","ko":"관심종목을 선택하세요","es":"Selecciona una Watchlist primero"},
     "err_no_select":{"zh-TW":"請先在列表中點選一個項目","zh-CN":"请先在列表中点选一个项目","en":"Please select an item in the list","ja":"リストから項目を選択してください","ko":"목록에서 항목을 선택하세요","es":"Selecciona un elemento en la lista"},
+    "alert_title":{"zh-TW":"價格提醒設定","zh-CN":"价格提醒设定","en":"Price Alert Settings","ja":"価格アラート設定","ko":"가격 알림 설정","es":"Configuración de Alerta"},
+    "alert_high":{"zh-TW":"高價提醒（高於此價格拉通知）：","zh-CN":"高价提醒（高于此价格通知）：","en":"High Price Alert (notify when above):","ja":"高値アラート（この値以上で通知）：","ko":"고가 알림 (이 가격 이상일 때):","es":"Alerta Alta (notificar cuando esté arriba de):"},
+    "alert_low":{"zh-TW":"低價提醒（低於此價格拉通知）：","zh-CN":"低价提醒（低于此价格通知）：","en":"Low Price Alert (notify when below):","ja":"安値アラート（この値以下で通知）：","ko":"저가 알림 (이 가격 이하일 때):","es":"Alerta Baja (notificar cuando esté debajo de):"},
+    "alert_clear":{"zh-TW":"清除提醒","zh-CN":"清除提醒","en":"Clear Alerts","ja":"アラートをクリア","ko":"알림 지우기","es":"Borrar Alertas"},
+    "alert_none":{"zh-TW":"（不設定）","zh-CN":"（不设定）","en":"(no alert)","ja":"（設定なし）","ko":"（설정 안함）","es":"(sin alerta)"},
+    "alert_saved":{"zh-TW":"提醒已設定","zh-CN":"提醒已设定","en":"Alert saved","ja":"アラート設定完了","ko":"알림 설정됨","es":"Alerta guardada"},
+    "alert_high_triggered":{"zh-TW":"🚨 高價提醒：{ticker} 已漲至 {price}（提醒價：{target}）","zh-CN":"🚨 高价提醒：{ticker} 已涨至 {price}（提醒价：{target}）","en":"🚨 High Alert: {ticker} rose to {price} (alert at {target})","ja":"🚨 高値アラート：{ticker} が {price} に上昇（設定値：{target}）","ko":"🚨 고가 알림：{ticker} 이(가) {price} 로 상승（설정가：{target}）","es":"🚨 Alerta Alta: {ticker} subió a {price} (alerta en {target})"},
+    "alert_low_triggered":{"zh-TW":"📉 低價提醒：{ticker} 已跌至 {price}（提醒價：{target}）","zh-CN":"📉 低价提醒：{ticker} 已跌至 {price}（提醒价：{target}）","en":"📉 Low Alert: {ticker} dropped to {price} (alert at {target})","ja":"📉 安値アラート：{ticker} が {price} に下落（設定値：{target}）","ko":"📉 저가 알림：{ticker} 이(가) {price} 로 하락（설정가：{target}）","es":"📉 Alerta Baja: {ticker} bajó a {price} (alerta en {target})"},
+    "btn_save_alert":{"zh-TW":"儲存","zh-CN":"储存","en":"Save","ja":"保存","ko":"저장","es":"Guardar"},
+    "alert_set_title":{"zh-TW":"設定「{ticker}」的提醒","zh-CN":"设定「{ticker}」的提醒","en":"Set alerts for {ticker}","ja":"「{ticker}」のアラート設定","ko":"{ticker} 알림 설정","es":"Configurar alertas para {ticker}"},
+    "alert_list_label":{"zh-TW":"已設定的提醒：","zh-CN":"已设定的提醒：","en":"Current Alerts:","ja":"設定されたアラート：","ko":"설정된 알림:","es":"Alertas Configuradas:"},
+    "btn_delete_selected":{"zh-TW":"刪除所選","zh-CN":"删除所选","en":"Delete Selected","ja":"選択を削除","ko":"선택 삭제","es":"Eliminar Seleccionado"},
+    "btn_reset_triggered":{"zh-TW":"重置已觸發","zh-CN":"重置已触发","en":"Reset Triggered","ja":"トリガー解除","ko":"트리거 초기화","es":"Restablecer Disparados"},
+    "alert_high_label":{"zh-TW":"高","zh-CN":"高","en":"High","ja":"高","ko":"고","es":"Alto"},
+    "alert_low_label":{"zh-TW":"低","zh-CN":"低","en":"Low","ja":"低","ko":"저","es":"Bajo"},
+    "alert_triggered":{"zh-TW":"已觸發","zh-CN":"已触发","en":"triggered","ja":"トリガー済み","ko":"트리거됨","es":"disparado"},
+    "btn_add_continue":{"zh-TW":"加入（Enter 繼續新增）","zh-CN":"加入（Enter 继续新增）","en":"Add (Enter to continue adding)","ja":"追加（Enter で追加継続）","ko":"추가 (Enter로 추가 계속)","es":"Agregar (Enter para seguir agregando)"},
+    "btn_cancel_zh":{"zh-TW":"取消","zh-CN":"取消","en":"Cancel","ja":"キャンセル","ko":"취소","es":"Cancelar"},
+    "err_wl_name":{"zh-TW":"請輸入名稱","zh-CN":"请输入名称","en":"Enter name","ja":"名前を入力","ko":"이름 입력","es":"Ingrese nombre"},
+    "err_search_select":{"zh-TW":"請先在搜尋結果中點選一個項目","zh-CN":"请先在搜寻结果中点选一个项目","en":"Select an item from search results","ja":"検索結果から項目を選択","ko":"검색 결과에서 항목 선택","es":"Seleccione un elemento de los resultados"},
+    "err_ticker_input":{"zh-TW":"請輸入 Ticker","zh-CN":"请输入 Ticker","en":"Enter Ticker","ja":"ティッカーを入力","ko":"티커 입력","es":"Ingrese Ticker"},
+    "err_alert_high_num":{"zh-TW":"高價提醒請輸入數字","zh-CN":"高价提醒请输入数字","en":"Enter a valid number for high alert","ja":"高値アラートに数値を入力","ko":"고가 알림에 숫자 입력","es":"Ingrese un número válido para alerta alta"},
+    "err_alert_low_num":{"zh-TW":"低價提醒請輸入數字","zh-CN":"低价提醒请输入数字","en":"Enter a valid number for low alert","ja":"安値アラートに数値を入力","ko":"저가 알림에 숫자 입력","es":"Ingrese un número válido para alerta baja"},
+    "dialog_new_wl":{"zh-TW":"新增 Watchlist","zh-CN":"新增 Watchlist","en":"New Watchlist","ja":"新規 Watchlist","ko":"새 관심종목","es":"Nueva Watchlist"},
 }
 
 def _init_lang() -> None:
@@ -108,6 +167,35 @@ def t(key: str) -> str:
 
 CURRENT_LANG = "zh-TW"
 CURRENT_THEME = "system"
+CURRENT_FONT_FAMILY = ["微軟正黑體"]
+CURRENT_FONT_SIZE = [13]
+
+def get_font(size: int = None) -> tuple:
+    """Return font tuple using current font family and size."""
+    return (CURRENT_FONT_FAMILY[0], size or CURRENT_FONT_SIZE[0])
+
+def get_installed_fonts() -> list[str]:
+    """Get list of commonly available Chinese/Unicode fonts on Windows."""
+    import tkinter.font as tkfont
+    try:
+        families = set(tkfont.families())
+    except Exception:
+        families = set()
+    # Common fonts to prioritize
+    priority = ["微軟正黑體", "Microsoft JhengHei", "新細明體", "PMingLiU",
+                "標楷體", "DFKai-SB", "細明體", "SimHei", "SimSun",
+                "Arial", "Tahoma", "Times New Roman", "Courier New"]
+    result = []
+    for f in priority:
+        if f in families:
+            result.append(f)
+    for f in sorted(families):
+        if f not in result and not f.startswith("@"):
+            result.append(f)
+    return result
+
+# Font list will be populated dynamically
+INSTALLED_FONTS = []
 
 def _fmt_price(val: Any) -> str:
     if val is None or (isinstance(val, float) and math.isnan(val)):
@@ -231,23 +319,32 @@ def save_watchlists(watchlists, active_wl):
         with open(SAVE_FILE, "w", encoding="utf-8") as f:
             json.dump({"active_wl": active_wl,
                         "watchlists": {n: list(v) for n, v in watchlists.items()},
-                        "lang": CURRENT_LANG, "theme": CURRENT_THEME},
+                        "lang": CURRENT_LANG, "theme": CURRENT_THEME,
+                        "font_family": CURRENT_FONT_FAMILY[0],
+                        "font_size": CURRENT_FONT_SIZE[0],
+                        "alerts": PRICE_ALERTS},
                        f, ensure_ascii=False, indent=2)
     except Exception as e:
         print("save error:", e)
 
 def load_watchlists():
+    global PRICE_ALERTS, CURRENT_FONT_FAMILY, CURRENT_FONT_SIZE
     if not os.path.exists(SAVE_FILE):
-        return None, None, None, None
+        return None, None, None, None, None, None
     try:
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         wl = data.get("watchlists", {})
-        restored = {n: [tuple(it) for it in v] for n, v in wl.items()}
-        return restored, data.get("active_wl"), data.get("lang"), data.get("theme")
+        restored = {n: [tuple(it) if isinstance(it, list) else it for it in v] for n, v in wl.items()}
+        PRICE_ALERTS = data.get("alerts", {})
+        font_family = data.get("font_family", "微軟正黑體")
+        font_size = data.get("font_size", 13)
+        CURRENT_FONT_FAMILY[0] = font_family
+        CURRENT_FONT_SIZE[0] = font_size
+        return restored, data.get("active_wl"), data.get("lang"), data.get("theme"), font_family, font_size
     except Exception as e:
         print("load error:", e)
-        return None, None, None, None
+        return None, None, None, None, None, None
 
 def detect_system_theme():
     try:
@@ -269,42 +366,48 @@ def _get_effective_theme():
 def apply_theme(root, style):
     theme = _get_effective_theme()
     is_dark = (theme == "dark")
-    bg = "#1a1a1a" if is_dark else "#f0f0f0"
-    fg = "#929292" if is_dark else "#333333"
-    panel = "#252525" if is_dark else "#e8e8e8"
-    entry_bg = "#1a1a1a" if is_dark else "#ffffff"
-    field_fg = "#929292" if is_dark else "#000000"
-    tree_bg = "#1a1a1a" if is_dark else "#ffffff"
-    tree_fg = "#929292" if is_dark else "#000000"
-    grid_c = "#333333" if is_dark else "#cccccc"
-    sel_c = "#2a5a8a" if is_dark else "#0078d4"
-    sel_fg = "#ffffff"
+    # 统一灰色系 - 日间模式用淡一点的灰色
+    main_gray = "#1a1a1a" if is_dark else "#c0c0c0"
+    text_gray = "#cccccc" if is_dark else "#1a1a1a"
+    btn_gray = "#2a2a2a" if is_dark else "#b5b5b5"
+    btn_text = "#cccccc" if is_dark else "#000000"
+    sel_gray = "#2a5a8a" if is_dark else "#8090a8"
 
-    root.configure(bg=bg)
+    root.configure(bg=main_gray)
     style.theme_use("clam")
-    style.configure(".", background=bg, foreground=fg)
-    style.configure("TFrame", background=bg)
-    style.configure("TLabel", background=bg, foreground=fg)
-    style.configure("TButton")
-    style.configure("TCheckbutton", background=bg, foreground=fg)
-    style.configure("TRadiobutton", background=bg, foreground=fg)
-    style.map("TButton", background=[("active", "#3a3a3a" if is_dark else "#d0d0d0")])
-    style.configure("TLabelframe", background=panel, foreground=fg)
-    style.configure("TLabelframe.Label", background=panel, foreground=fg)
-    style.configure("TEntry", fieldbackground=entry_bg, foreground=field_fg,
-                    bordercolor="#444444" if is_dark else "#aaa")
-    style.configure("Treeview", background=tree_bg, foreground=tree_fg,
-                    fieldbackground=tree_bg, bordercolor=grid_c)
-    style.configure("Treeview.Heading", background=panel, foreground=fg)
-    style.map("Treeview", background=[("selected", sel_c)], foreground=[("selected", sel_fg)])
-    # menubar（Windows 由系統渲染，盡量套色）
+    style.configure(".", background=main_gray, foreground=text_gray)
+    style.configure("TFrame", background=main_gray)
+    style.configure("TLabel", background=main_gray, foreground=text_gray)
+    style.configure("TButton", background=btn_gray, foreground=btn_text)
+    style.configure("TCheckbutton", background=main_gray, foreground=text_gray)
+    style.configure("TRadiobutton", background=main_gray, foreground=text_gray)
+    style.map("TButton", background=[("active", btn_gray)])
+    style.configure("TLabelframe", background=main_gray, foreground=text_gray)
+    style.configure("TLabelframe.Label", background=main_gray, foreground=text_gray)
+    style.configure("TEntry", fieldbackground=main_gray, foreground=text_gray,
+                    bordercolor=text_gray)
+    style.configure("Treeview", background=main_gray, foreground=text_gray,
+                    fieldbackground=main_gray, bordercolor=text_gray, font=get_font())
+    style.configure("Treeview.Heading", background=btn_gray, foreground=btn_text, font=get_font())
+    style.map("Treeview", background=[("selected", sel_gray)], foreground=[("selected", btn_text)])
     try:
-        root.option_add("*Menu.background", panel)
-        root.option_add("*Menu.foreground", fg)
-        root.option_add("*Menu.activeBackground", sel_c)
-        root.option_add("*Menu.activeForeground", sel_fg)
+        root.option_add("*Menu.background", main_gray)
+        root.option_add("*Menu.foreground", text_gray)
+        root.option_add("*Menu.activeBackground", sel_gray)
+        root.option_add("*Menu.activeForeground", btn_text)
     except Exception:
         pass
+
+    # 存储统一颜色供所有组件使用
+    # 暗黑模式下输入框背景更浅以便与按钮区分
+    entry_bg = "#3a3a3a" if is_dark else main_gray
+    entry_border = "#666666" if is_dark else "#808080"
+    root._theme_colors = {
+        "bg": main_gray, "fg": text_gray, "panel": main_gray,
+        "entry_bg": entry_bg, "entry_fg": text_gray, "entry_border": entry_border,
+        "btn_bg": btn_gray, "btn_fg": btn_text, "btn_active": btn_gray,
+        "list_bg": main_gray, "list_fg": text_gray, "list_sel": sel_gray
+    }
 
 
 class ChartWindow:
@@ -488,7 +591,7 @@ class WatchlistApp:
         self._search_enabled = False
         self._auto_job = None
 
-        saved, saved_active, saved_lang, saved_theme = load_watchlists()
+        saved, saved_active, saved_lang, saved_theme, _, _ = load_watchlists()
         if saved is not None:
             self.watchlists = saved
             self.active_wl = saved_active
@@ -502,6 +605,10 @@ class WatchlistApp:
             global CURRENT_THEME
             CURRENT_THEME = saved_theme
 
+        # 字体列表在菜单构建时动态获取
+        if CURRENT_FONT_FAMILY[0] not in get_installed_fonts() and get_installed_fonts():
+            CURRENT_FONT_FAMILY[0] = get_installed_fonts()[0]
+
         try:
             self._style = ttk.Style()
         except Exception:
@@ -509,6 +616,7 @@ class WatchlistApp:
 
         self._build_ui()
         self._apply_theme()
+        self._apply_search_style()
         self._refresh_wl_list()
         self._refresh_items()
 
@@ -518,9 +626,10 @@ class WatchlistApp:
 
     def _apply_zoom(self):
         w, h = 960, 600
-        zw, zh = int(w * 1.5), int(h * 1.5)
+        zh = int(h * 1.5 * 1.12)  # 高度增加12%
+        zw = int(w * 1.5 * 1.05)  # 寬度也稍微增加保持比例
         self.root.geometry(f"{zw}x{zh}")
-        self.root.minsize(int(820 * 1.5), int(500 * 1.5))
+        self.root.minsize(int(820 * 1.5 * 1.05), int(500 * 1.5 * 1.12))
 
     def _save(self):
         save_watchlists(self.watchlists, self.active_wl)
@@ -551,38 +660,63 @@ class WatchlistApp:
 
     def _build_ui(self):
         root = self.root
+        colors = self._get_dialog_colors()
 
-        # 上方工具列
-        top = ttk.Frame(root, padding=6)
+        # 上方工具列 - 使用 tk.Frame + tk.Button 实现主题色
+        top = tk.Frame(root, bg=colors["bg"], padx=6, pady=6)
         top.pack(fill=tk.X, side=tk.TOP)
 
-        self.btn_add_wl = ttk.Button(top, text=t("btn_new_wl"), command=self._add_watchlist)
+        self.btn_add_wl = tk.Button(top, text=t("btn_new_wl"), command=self._add_watchlist,
+                                     bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                                     font=get_font())
         self.btn_add_wl.pack(side=tk.LEFT, padx=(0, 3))
-        self.btn_del_wl = ttk.Button(top, text=t("btn_del_wl"), command=self._del_watchlist)
+        self.btn_del_wl = tk.Button(top, text=t("btn_del_wl"), command=self._del_watchlist,
+                                     bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                                     font=get_font())
         self.btn_del_wl.pack(side=tk.LEFT, padx=(0, 3))
-        self.btn_add_item = ttk.Button(top, text=t("btn_add_item"), command=self._open_add_dialog)
+        self.btn_add_item = tk.Button(top, text=t("btn_add_item"), command=self._open_add_dialog,
+                                       bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                                       font=get_font())
         self.btn_add_item.pack(side=tk.LEFT, padx=(0, 3))
-        self.btn_del_item = ttk.Button(top, text=t("btn_del_item"), command=self._del_item)
+        self.btn_del_item = tk.Button(top, text=t("btn_del_item"), command=self._del_item,
+                                       bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                                       font=get_font())
         self.btn_del_item.pack(side=tk.LEFT, padx=(0, 3))
-        ttk.Separator(top, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        self.btn_set_alert = tk.Button(top, text=t("btn_set_alert"), command=self._open_alert_dialog,
+                                       bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                                       font=get_font())
+        self.btn_set_alert.pack(side=tk.LEFT, padx=(0, 3))
 
-        self.btn_refresh_current = ttk.Button(top, text=t("btn_refresh_cur"), command=self._refresh_current_watchlist)
+        # 分隔线
+        sep = tk.Frame(top, width=2, bg=colors["fg"])
+        sep.pack(side=tk.LEFT, fill=tk.Y, padx=6)
+
+        self.btn_refresh_current = tk.Button(top, text=t("btn_refresh_cur"),
+                                             command=self._refresh_current_watchlist,
+                                             bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                                             font=get_font())
         self.btn_refresh_current.pack(side=tk.LEFT, padx=(0, 3))
-        self.btn_refresh = ttk.Button(top, text=t("btn_refresh_all"), command=self._refresh_all)
+        self.btn_refresh = tk.Button(top, text=t("btn_refresh_all"), command=self._refresh_all,
+                                      bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                                      font=get_font())
         self.btn_refresh.pack(side=tk.LEFT, padx=(0, 3))
 
         self.status_var = tk.StringVar(value=t("status_ready"))
-        self.status_label = ttk.Label(top, textvariable=self.status_var)
+        self.status_label = tk.Label(top, textvariable=self.status_var,
+                                      bg=colors["bg"], fg=colors["fg"], font=get_font())
         self.status_label.pack(side=tk.RIGHT, padx=(8, 0))
 
         self._build_menu()
 
-        # 主分割區域
+        # 主分割區域 - 使用 tk.PanedWindow
         paned = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
 
-        left = ttk.LabelFrame(paned, text=t("frame_watchlists"), padding=4)
+        # 左侧 Watchlists 区域
+        left = tk.Frame(paned, bg=colors["bg"])
         paned.add(left, weight=1)
+        tk.Label(left, text=t("frame_watchlists"), font=get_font(),
+                 bg=colors["bg"], fg=colors["fg"], anchor=tk.W).pack(fill=tk.X, padx=8, pady=(4, 2))
 
         self.wl_tree = ttk.Treeview(left, columns=("cnt",), show="tree headings", height=18)
         self.wl_tree.heading("#0", text=t("col_name"))
@@ -590,16 +724,20 @@ class WatchlistApp:
         self.wl_tree.column("#0", width=150, stretch=True)
         self.wl_tree.column("#1", width=30, anchor=tk.CENTER)
         self.wl_tree.bind("<<TreeviewSelect>>", self._on_wl_select)
-        self.wl_tree.pack(fill=tk.BOTH, expand=True)
+        self.wl_tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
 
+        # 右侧区域
         right = ttk.PanedWindow(paned, orient=tk.VERTICAL)
         paned.add(right, weight=3)
 
-        item_frame = ttk.LabelFrame(right, text=t("frame_prices"), padding=4)
-        right.add(item_frame, weight=3)
+        # 商品價格區域
+        price_frame = tk.Frame(right, bg=colors["bg"])
+        right.add(price_frame, weight=7)
+        tk.Label(price_frame, text=t("frame_prices"), font=get_font(),
+                 bg=colors["bg"], fg=colors["fg"], anchor=tk.W).pack(fill=tk.X, padx=8, pady=(4, 2))
 
         cols = ("label", "ticker", "price", "change", "pct", "vol")
-        self.item_tree = ttk.Treeview(item_frame, columns=cols, show="headings", height=10)
+        self.item_tree = ttk.Treeview(price_frame, columns=cols, show="headings", height=12)
         self.item_tree.heading("label", text=t("col_name"))
         self.item_tree.heading("ticker", text=t("col_ticker"))
         self.item_tree.heading("price", text=t("col_price"))
@@ -610,54 +748,116 @@ class WatchlistApp:
                            ("change",80),("pct",75),("vol",90)]:
             anchor = tk.W if col_id == "label" else tk.E if col_id != "ticker" else tk.CENTER
             self.item_tree.column(col_id, width=w, anchor=anchor)
-        self.item_tree.pack(fill=tk.BOTH, expand=True)
+        self.item_tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
         self.item_tree.bind("<Double-1>", self._on_item_double_click)
 
-        search_frame = ttk.LabelFrame(right, text=t("frame_search"), padding=6)
-        right.add(search_frame, weight=2)
+        # 設定 Treeview 行高和字體（根據字體大小動態調整）
+        try:
+            style = ttk.Style()
+            rowheight = max(27, CURRENT_FONT_SIZE[0] + 14)
+            style.configure("Treeview", rowheight=rowheight, font=get_font())
+            style.configure("Treeview.Heading", font=get_font())
+        except Exception:
+            pass
 
-        row1 = ttk.Frame(search_frame)
+        # 搜尋區域
+        search_frame = tk.Frame(right, bg=colors["bg"], relief=tk.FLAT, bd=0)
+        right.add(search_frame, weight=3)
+        tk.Label(search_frame, text=t("frame_search"), font=get_font(),
+                 bg=colors["bg"], fg=colors["fg"]).pack(anchor=tk.W, padx=8, pady=(4, 2))
+
+        row1 = tk.Frame(search_frame, bg=colors["bg"])
         row1.pack(fill=tk.X, pady=(0, 4))
-        ttk.Label(row1, text=t("lbl_search")).pack(side=tk.LEFT)
+        tk.Label(row1, text=t("lbl_search"), bg=colors["bg"], fg=colors["fg"], font=get_font()).pack(side=tk.LEFT)
         self.search_var = tk.StringVar()
-        self.search_entry = ttk.Entry(row1, textvariable=self.search_var)
+        self.search_entry = tk.Entry(row1, textvariable=self.search_var,
+                                     bg=colors["entry_bg"], fg=colors["entry_fg"],
+                                     insertbackground=colors["entry_fg"],
+                                     relief=tk.SOLID, bd=1,
+                                     highlightbackground=colors["entry_border"],
+                                     highlightcolor=colors["entry_border"],
+                                     highlightthickness=1,
+                                     font=get_font())
         self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(6, 0))
 
-        ttk.Label(search_frame, text=t("lbl_result")).pack(anchor=tk.W)
+        tk.Label(search_frame, text=t("lbl_result"), bg=colors["bg"], fg=colors["fg"], font=get_font()).pack(anchor=tk.W, padx=8)
+
         self.result_tree = ttk.Treeview(search_frame, columns=("lbl","tk","nm"),
-                                        show="headings", height=5)
+                                        show="headings", height=6)
         self.result_tree.heading("lbl", text=t("col_name"))
         self.result_tree.heading("tk", text=t("col_ticker"))
         self.result_tree.heading("nm", text=t("col_name"))
         self.result_tree.column("lbl", width=200, anchor=tk.W)
         self.result_tree.column("tk", width=90, anchor=tk.CENTER)
         self.result_tree.column("nm", width=180, anchor=tk.W)
-        self.result_tree.pack(fill=tk.BOTH, expand=True, pady=(2, 4))
+        self.result_tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=(2, 4))
         self.result_tree.bind("<Double-1>", lambda e: self._add_selected())
         self.result_tree.bind("<<TreeviewSelect>>", self._on_res_select)
 
-        row2 = ttk.Frame(search_frame)
+        row2 = tk.Frame(search_frame, bg=colors["bg"])
         row2.pack(fill=tk.X, pady=(4, 0))
-        ttk.Label(row2, text=t("lbl_custom_name")).pack(side=tk.LEFT)
+        tk.Label(row2, text=t("lbl_custom_name"), bg=colors["bg"], fg=colors["fg"], font=get_font()).pack(side=tk.LEFT)
         self.label_var = tk.StringVar()
-        self.label_entry = ttk.Entry(row2, textvariable=self.label_var, width=16)
+        self.label_entry = tk.Entry(row2, textvariable=self.label_var, width=16,
+                                    bg=colors["entry_bg"], fg=colors["entry_fg"],
+                                    insertbackground=colors["entry_fg"],
+                                    relief=tk.SOLID, bd=1,
+                                    highlightbackground=colors["entry_border"],
+                                    highlightcolor=colors["entry_border"],
+                                    highlightthickness=1,
+                                    font=get_font())
         self.label_entry.pack(side=tk.LEFT, padx=(4, 4))
-        self.btn_add_res = ttk.Button(row2, text=t("btn_add_selected"),
-                                      command=self._add_selected, state=tk.DISABLED)
+        self.btn_add_res = tk.Button(row2, text=t("btn_add_selected"), command=self._add_selected,
+                                     state=tk.DISABLED, bg=colors["btn_bg"], fg=colors["btn_fg"],
+                                     relief=tk.RAISED, bd=1, font=get_font())
         self.btn_add_res.pack(side=tk.LEFT)
-        ttk.Button(row2, text=t("btn_direct_input"), command=self._open_add_dialog).pack(side=tk.LEFT, padx=(6, 0))
+        tk.Button(row2, text=t("btn_direct_input"), command=self._open_add_dialog,
+                  bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                  font=get_font()).pack(side=tk.LEFT, padx=(6, 0))
 
     def _build_menu(self):
-        menubar = tk.Menu(self.root)
-        lang_menu = tk.Menu(menubar, tearoff=0)
-        for code, label in [("zh-TW","繁體中文"),("zh-CN","简体中文"),("en","English"),
+        colors = self._get_dialog_colors()
+        font_used = get_font()
+        menubar = tk.Menu(self.root, bg=colors["bg"], fg=colors["fg"],
+                          activebackground=colors["list_sel"], activeforeground=colors["fg"],
+                          font=font_used)
+        lang_menu = tk.Menu(menubar, tearoff=0, bg=colors["bg"], fg=colors["fg"],
+                            activebackground=colors["list_sel"], activeforeground=colors["fg"],
+                            font=font_used)
+        for code, label in [("zh-TW","繁體中文"),("zh-CN","簡體中文"),("en","English"),
                              ("ja","日本語"),("ko","한국어"),("es","Español")]:
             lang_menu.add_command(label=label, command=lambda c=code: self._switch_lang(c))
         menubar.add_cascade(label=t("lang_menu"), menu=lang_menu)
-        theme_menu = tk.Menu(menubar, tearoff=0)
+        theme_menu = tk.Menu(menubar, tearoff=0, bg=colors["bg"], fg=colors["fg"],
+                            activebackground=colors["list_sel"], activeforeground=colors["fg"],
+                            font=font_used)
         for val, label in [("system","🌓 System"),("light","☀ Light"),("dark","🌙 Dark")]:
             theme_menu.add_command(label=label, command=lambda v=val: self._switch_theme(v))
         menubar.add_cascade(label=t("theme_menu"), menu=theme_menu)
+        font_menu = tk.Menu(menubar, tearoff=0, bg=colors["bg"], fg=colors["fg"],
+                           activebackground=colors["list_sel"], activeforeground=colors["fg"],
+                           font=font_used)
+        # Font family submenu - dynamically get fonts
+        family_submenu = tk.Menu(font_menu, tearoff=0, bg=colors["bg"], fg=colors["fg"],
+                                  activebackground=colors["list_sel"], activeforeground=colors["fg"],
+                                  font=font_used)
+        current_family = CURRENT_FONT_FAMILY[0]
+        font_families = get_installed_fonts()
+        for family in font_families:
+            cmd = lambda f=family: self._switch_font_family(f)
+            family_submenu.add_command(label=family, command=cmd)
+        if not font_families:
+            family_submenu.add_command(label="(無字體)", state=tk.DISABLED)
+        font_menu.add_cascade(label=t("font_family"), menu=family_submenu)
+        # Font size submenu
+        size_submenu = tk.Menu(font_menu, tearoff=0, bg=colors["bg"], fg=colors["fg"],
+                                activebackground=colors["list_sel"], activeforeground=colors["fg"],
+                                font=font_used)
+        for size in range(8, 17):
+            cmd = lambda s=size: self._switch_font_size(s)
+            size_submenu.add_command(label=str(size), command=cmd)
+        font_menu.add_cascade(label=t("font_size"), menu=size_submenu)
+        menubar.add_cascade(label=t("font_menu"), menu=font_menu)
         self.root.config(menu=menubar)
 
     def _switch_lang(self, code):
@@ -668,15 +868,70 @@ class WatchlistApp:
             w.destroy()
         self._build_ui()
         self._apply_theme()
+        self._apply_search_style()
         self._refresh_wl_list()
         self._refresh_items()
+
+    def _switch_font_family(self, family: str):
+        global CURRENT_FONT_FAMILY
+        CURRENT_FONT_FAMILY[0] = family
+        self._save()
+        for w in self.root.winfo_children():
+            w.destroy()
+        self._build_ui()
+        self._apply_theme()
+        self._apply_search_style()
+        self._refresh_wl_list()
+        self._refresh_items()
+
+    def _switch_font_size(self, size: int):
+        global CURRENT_FONT_SIZE
+        CURRENT_FONT_SIZE[0] = size
+        self._save()
+        for w in self.root.winfo_children():
+            w.destroy()
+        self._build_ui()
+        self._apply_theme()
+        self._apply_search_style()
+        self._refresh_wl_list()
+        self._refresh_items()
+
+    def _apply_search_style(self):
+        """Apply theme-aware style to search Entry"""
+        colors = self._get_dialog_colors()
+        try:
+            self.search_entry.configure(
+                background=colors["entry_bg"],
+                foreground=colors["entry_fg"],
+                insertbackground=colors["entry_fg"],
+                relief=tk.SOLID,
+                highlightbackground=colors["entry_border"],
+                highlightcolor=colors["entry_border"],
+                highlightthickness=1
+            )
+            self.label_entry.configure(
+                background=colors["entry_bg"],
+                foreground=colors["entry_fg"],
+                insertbackground=colors["entry_fg"],
+                relief=tk.SOLID,
+                highlightbackground=colors["entry_border"],
+                highlightcolor=colors["entry_border"],
+                highlightthickness=1
+            )
+        except Exception:
+            pass
 
     def _switch_theme(self, val):
         global CURRENT_THEME
         CURRENT_THEME = val
         self._save()
         self._apply_theme()
-        # 更新價格表 tag 顔色
+        self._apply_search_style()
+        # 重新构建整个 UI 以更新所有组件颜色
+        for w in self.root.winfo_children():
+            w.destroy()
+        self._build_ui()
+        self._refresh_wl_list()
         self._refresh_items()
 
     def _refresh_wl_list(self):
@@ -723,7 +978,7 @@ class WatchlistApp:
         self._refresh_items()
 
     def _add_watchlist(self):
-        name = simpledialog.askstring("新增 Watchlist", "請輸入名稱：")
+        name = simpledialog.askstring(t("dialog_new_wl"), t("err_wl_name"))
         if not name:
             return
         name = name.strip()
@@ -800,7 +1055,7 @@ class WatchlistApp:
 
     def _add_selected(self):
         if not self._selected_res:
-            messagebox.showinfo("提示", "請先在搜尋結果中點選一個項目")
+            messagebox.showinfo("提示", t("err_search_select"))
             return
         if not self.active_wl:
             messagebox.showinfo("提示", t("err_no_wl"))
@@ -835,33 +1090,339 @@ class WatchlistApp:
         dlg.geometry(f"+{self.root.winfo_x() + (self.root.winfo_width()-dlg.winfo_reqwidth())//2}"
                      f"+{self.root.winfo_y() + (self.root.winfo_height()-dlg.winfo_reqheight())//2}")
 
+    def _get_dialog_colors(self):
+        """Get unified gray colors for all components"""
+        is_dark = (_get_effective_theme() == "dark")
+        main_gray = "#1a1a1a" if is_dark else "#c0c0c0"
+        text_gray = "#cccccc" if is_dark else "#1a1a1a"
+        btn_gray = "#2a2a2a" if is_dark else "#b5b5b5"
+        btn_text = "#cccccc" if is_dark else "#000000"
+        sel_gray = "#2a5a8a" if is_dark else "#8090a8"
+        # 暗黑模式下输入框背景更浅 + 添加对比边框
+        entry_bg = "#3a3a3a" if is_dark else main_gray
+        entry_border = "#666666" if is_dark else "#808080"
+        return {
+            "bg": main_gray, "fg": text_gray, "panel": main_gray,
+            "entry_bg": entry_bg, "entry_fg": text_gray, "entry_border": entry_border,
+            "btn_bg": btn_gray, "btn_fg": btn_text, "btn_active": btn_gray,
+            "list_bg": main_gray, "list_fg": text_gray, "list_sel": sel_gray
+        }
+
+    def _apply_entry_style(self, entry):
+        """Apply theme-aware style to an Entry widget"""
+        colors = self._get_dialog_colors()
+        try:
+            entry.configure(
+                background=colors["entry_bg"],
+                foreground=colors["entry_fg"],
+                insertcolor=colors["entry_fg"],
+                relief=tk.SOLID,
+                bd=1
+            )
+        except Exception:
+            pass
+
     def _open_add_dialog(self):
         if not self.active_wl:
             messagebox.showinfo("提示", t("err_no_wl"))
             return
+        colors = self._get_dialog_colors()
+
         dlg = tk.Toplevel(self.root)
         dlg.title(t("dlg_add_title"))
         dlg.transient(self.root)
         dlg.grab_set()
-        dlg.geometry("420x150")
+        dlg.geometry("420x224")
+        dlg.configure(bg=colors["bg"])
         self._center_dialog(dlg)
-        ttk.Label(dlg, text=t("dlg_ticker_hint")).pack(anchor=tk.W, padx=12, pady=(12, 2))
+
+        # 使用 Frame 代替 ttk.Frame 以便控制背景色
+        content = tk.Frame(dlg, bg=colors["bg"])
+        content.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
+
+        ttk.Label(content, text=t("dlg_ticker_hint"), font=get_font()).pack(anchor=tk.W)
         tk_var = tk.StringVar()
+        entry1 = tk.Entry(content, textvariable=tk_var, width=42,
+                         bg=colors["entry_bg"], fg=colors["entry_fg"],
+                         insertbackground=colors["entry_fg"], relief=tk.SOLID, bd=1,
+                         highlightbackground=colors["entry_border"],
+                         highlightcolor=colors["entry_border"],
+                         highlightthickness=1,
+                         font=get_font())
+        entry1.pack(pady=(2, 8))
+
+        ttk.Label(content, text=t("dlg_label_hint"), font=get_font()).pack(anchor=tk.W)
         lb_var = tk.StringVar()
-        ttk.Entry(dlg, textvariable=tk_var, width=42).pack(padx=12, fill=tk.X)
-        ttk.Label(dlg, text=t("dlg_label_hint")).pack(anchor=tk.W, padx=12, pady=(8, 2))
-        ttk.Entry(dlg, textvariable=lb_var, width=42).pack(padx=12, fill=tk.X)
+        entry2 = tk.Entry(content, textvariable=lb_var, width=42,
+                         bg=colors["entry_bg"], fg=colors["entry_fg"],
+                         insertbackground=colors["entry_fg"], relief=tk.SOLID, bd=1,
+                         highlightbackground=colors["entry_border"],
+                         highlightcolor=colors["entry_border"],
+                         highlightthickness=1,
+                         font=get_font())
+        entry2.pack(pady=(2, 8))
+
         def _ok():
             sym = tk_var.get().strip()
             lbl = lb_var.get().strip() or sym
             if not sym:
-                messagebox.showwarning("提示", "請輸入 Ticker")
+                messagebox.showwarning("提示", t("err_ticker_input"))
                 return
             self._insert_item(lbl, sym, sym)
             tk_var.set(""); lb_var.set("")
             dlg.focus_force()
-        ttk.Button(dlg, text=f"{t('btn_ok')} (Enter 繼續新增)", command=_ok).pack(pady=8)
+
+        btn_frame = tk.Frame(dlg, bg=colors["bg"])
+        btn_frame.pack(pady=4)
+        btn_ok = tk.Button(btn_frame, text=t("btn_add_continue"), command=_ok,
+                          bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                          font=get_font())
+        btn_ok.pack(side=tk.LEFT, padx=5)
+        btn_cancel = tk.Button(btn_frame, text=t("btn_cancel_zh"), command=dlg.destroy,
+                               bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1,
+                               font=get_font())
+        btn_cancel.pack(side=tk.LEFT, padx=5)
+
         dlg.bind("<Return>", lambda e: _ok())
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        entry1.focus_set()
+
+    def _open_alert_dialog(self):
+        """打開價格提醒設置對話框"""
+        sel = self.item_tree.selection()
+        if not sel:
+            messagebox.showinfo("提示", t("err_no_select"))
+            return
+        ticker = sel[0]
+
+        colors = self._get_dialog_colors()
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(t("alert_title"))
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.geometry("420x550")
+        dlg.configure(bg=colors["bg"])
+        self._center_dialog(dlg)
+
+        # 使用 Frame 控制背景
+        content = tk.Frame(dlg, bg=colors["bg"])
+        content.pack(fill=tk.BOTH, expand=True)
+
+        # 當前提醒設置
+        current = PRICE_ALERTS.get(ticker, {})
+        current_high = current.get("high")
+        current_low = current.get("low")
+
+        tk.Label(content, text=t("alert_list_label"), font=get_font(),
+                 bg=colors["bg"], fg=colors["fg"]).pack(anchor=tk.W, padx=20, pady=(15, 4))
+
+        list_frame = tk.Frame(content, bg=colors["bg"])
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
+
+        alert_listbox = tk.Listbox(list_frame, height=6, font=get_font(),
+                                   bg=colors["list_bg"], fg=colors["list_fg"],
+                                   selectbackground=colors["list_sel"],
+                                   relief=tk.SOLID, bd=1)
+        alert_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        alert_scroll = tk.Scrollbar(list_frame, orient=tk.VERTICAL, command=alert_listbox.yview)
+        alert_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        alert_listbox.config(yscrollcommand=alert_scroll.set)
+
+        # 填充已有提醒（顯示觸發狀態）
+        alert_items = []  # 儲存 (ticker_key, alert_type, display_str)
+        if PRICE_ALERTS:
+            for tk_key, alert in sorted(PRICE_ALERTS.items()):
+                high_val = alert.get("high")
+                low_val = alert.get("low")
+                high_triggered = alert.get("high_triggered", False)
+                low_triggered = alert.get("low_triggered", False)
+                info = []
+                triggered_markers = []
+                if high_val:
+                    marker = "⚠️" if high_triggered else "↑"
+                    info.append(f"{marker}{t('alert_high_label')}={high_val}")
+                    if high_triggered:
+                        triggered_markers.append(t("alert_high_label"))
+                if low_val:
+                    marker = "⚠️" if low_triggered else "↓"
+                    info.append(f"{marker}{t('alert_low_label')}={low_val}")
+                    if low_triggered:
+                        triggered_markers.append(t("alert_low_label"))
+                if info:
+                    status = f" ({t('alert_triggered')})" if triggered_markers else ""
+                    display = f"{tk_key}: {', '.join(info)}{status}"
+                    alert_listbox.insert(tk.END, display)
+                    if high_val:
+                        alert_items.append((tk_key, "high", f"↑{t('alert_high_label')}={high_val}", high_triggered))
+                    if low_val:
+                        alert_items.append((tk_key, "low", f"↓{t('alert_low_label')}={low_val}", low_triggered))
+
+        def _delete_selected_alert():
+            sel_idx = alert_listbox.curselection()
+            if not sel_idx:
+                return
+            idx = sel_idx[0]
+            tk_key, alert_type, _, _ = alert_items[idx]
+            if tk_key in PRICE_ALERTS:
+                if alert_type == "high":
+                    PRICE_ALERTS[tk_key]["high"] = None
+                elif alert_type == "low":
+                    PRICE_ALERTS[tk_key]["low"] = None
+                # 如果兩個都沒了，刪除這個 ticker
+                if PRICE_ALERTS[tk_key]["high"] is None and PRICE_ALERTS[tk_key]["low"] is None:
+                    del PRICE_ALERTS[tk_key]
+                self._save()
+            # 重新載入列表
+            alert_listbox.delete(0, tk.END)
+            alert_items.clear()
+            for tk_key2, alert2 in sorted(PRICE_ALERTS.items()):
+                high_val = alert2.get("high")
+                low_val = alert2.get("low")
+                high_triggered = alert2.get("high_triggered", False)
+                low_triggered = alert2.get("low_triggered", False)
+                info = []
+                triggered_markers = []
+                if high_val:
+                    marker = "⚠️" if high_triggered else "↑"
+                    info.append(f"{marker}{t('alert_high_label')}={high_val}")
+                    if high_triggered:
+                        triggered_markers.append(t("alert_high_label"))
+                if low_val:
+                    marker = "⚠️" if low_triggered else "↓"
+                    info.append(f"{marker}{t('alert_low_label')}={low_val}")
+                    if low_triggered:
+                        triggered_markers.append(t("alert_low_label"))
+                if info:
+                    status = f" ({t('alert_triggered')})" if triggered_markers else ""
+                    display = f"{tk_key2}: {', '.join(info)}{status}"
+                    alert_listbox.insert(tk.END, display)
+                    if high_val:
+                        alert_items.append((tk_key2, "high", f"↑{t('alert_high_label')}={high_val}", high_triggered))
+                    if low_val:
+                        alert_items.append((tk_key2, "low", f"↓{t('alert_low_label')}={low_val}", low_triggered))
+
+        def _reset_all_triggered():
+            """重置所有已觸發的提醒狀態"""
+            reset_count = 0
+            for tk_key, alert in PRICE_ALERTS.items():
+                if alert.get("high_triggered"):
+                    alert["high_triggered"] = False
+                    reset_count += 1
+                if alert.get("low_triggered"):
+                    alert["low_triggered"] = False
+                    reset_count += 1
+            if reset_count > 0:
+                self._save()
+                self.status_var.set(f"{t('btn_reset_triggered')} {reset_count}")
+                # 重新載入列表
+                alert_listbox.delete(0, tk.END)
+                alert_items.clear()
+                for tk_key2, alert2 in sorted(PRICE_ALERTS.items()):
+                    high_val = alert2.get("high")
+                    low_val = alert2.get("low")
+                    high_triggered = alert2.get("high_triggered", False)
+                    low_triggered = alert2.get("low_triggered", False)
+                    info = []
+                    triggered_markers = []
+                    if high_val:
+                        marker = "⚠️" if high_triggered else "↑"
+                        info.append(f"{marker}{t('alert_high_label')}={high_val}")
+                        if high_triggered:
+                            triggered_markers.append(t("alert_high_label"))
+                    if low_val:
+                        marker = "⚠️" if low_triggered else "↓"
+                        info.append(f"{marker}{t('alert_low_label')}={low_val}")
+                        if low_triggered:
+                            triggered_markers.append(t("alert_low_label"))
+                    if info:
+                        status = f" ({t('alert_triggered')})" if triggered_markers else ""
+                        display = f"{tk_key2}: {', '.join(info)}{status}"
+                        alert_listbox.insert(tk.END, display)
+                        if high_val:
+                            alert_items.append((tk_key2, "high", f"↑{t('alert_high_label')}={high_val}", high_triggered))
+                        if low_val:
+                            alert_items.append((tk_key2, "low", f"↓{t('alert_low_label')}={low_val}", low_triggered))
+
+        btn_frame = tk.Frame(content, bg=colors["bg"])
+        btn_frame.pack(pady=(4, 0))
+        tk.Button(btn_frame, text=t("btn_delete_selected"), command=_delete_selected_alert,
+                  bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text=t("btn_reset_triggered"), command=_reset_all_triggered,
+                  bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1).pack(side=tk.LEFT, padx=5)
+
+        # === 新增/編輯當前 Ticker 的提醒 ===
+        sep_canvas = tk.Canvas(content, height=4, bg=colors["bg"], highlightthickness=0)
+        sep_canvas.pack(fill=tk.X, padx=15, pady=8)
+        sep_canvas.create_line(0, 2, sep_canvas.winfo_reqwidth(), 2, fill=colors["fg"], width=1)
+
+        tk.Label(content, text=t("alert_set_title").format(ticker=ticker), font=get_font(),
+                 bg=colors["bg"], fg=colors["fg"]).pack(anchor=tk.W, padx=20, pady=(5, 4))
+
+        # 高價提醒
+        high_frame = tk.Frame(content, bg=colors["bg"])
+        high_frame.pack(fill=tk.X, padx=20, pady=2)
+        tk.Label(high_frame, text=t("alert_high"), bg=colors["bg"], fg=colors["fg"]).pack(anchor=tk.W)
+        high_var = tk.StringVar(value=str(current_high) if current_high else "")
+        high_entry = tk.Entry(high_frame, textvariable=high_var, width=20,
+                             bg=colors["entry_bg"], fg=colors["entry_fg"],
+                             insertbackground=colors["entry_fg"], relief=tk.SOLID, bd=1,
+                             highlightbackground=colors["entry_border"],
+                             highlightcolor=colors["entry_border"],
+                             highlightthickness=1)
+        high_entry.pack(anchor=tk.W, pady=(2, 0))
+
+        # 低價提醒
+        low_frame = tk.Frame(content, bg=colors["bg"])
+        low_frame.pack(fill=tk.X, padx=20, pady=2)
+        tk.Label(low_frame, text=t("alert_low"), bg=colors["bg"], fg=colors["fg"]).pack(anchor=tk.W)
+        low_var = tk.StringVar(value=str(current_low) if current_low else "")
+        low_entry = tk.Entry(low_frame, textvariable=low_var, width=20,
+                            bg=colors["entry_bg"], fg=colors["entry_fg"],
+                            insertbackground=colors["entry_fg"], relief=tk.SOLID, bd=1,
+                            highlightbackground=colors["entry_border"],
+                            highlightcolor=colors["entry_border"],
+                            highlightthickness=1)
+        low_entry.pack(anchor=tk.W, pady=(2, 0))
+
+        def _save_alert():
+            try:
+                high_val = float(high_var.get()) if high_var.get().strip() else None
+            except ValueError:
+                messagebox.showwarning("提示", t("err_alert_high_num"))
+                return
+            try:
+                low_val = float(low_var.get()) if low_var.get().strip() else None
+            except ValueError:
+                messagebox.showwarning("提示", t("err_alert_low_num"))
+                return
+            if high_val is None and low_val is None:
+                # 清除這個 ticker 的提醒
+                if ticker in PRICE_ALERTS:
+                    del PRICE_ALERTS[ticker]
+                self.status_var.set(f"{ticker} 提醒已清除")
+            else:
+                # 保存提醒設置，重置觸發狀態
+                PRICE_ALERTS[ticker] = {
+                    "high": high_val,
+                    "low": low_val,
+                    "high_triggered": False,
+                    "low_triggered": False
+                }
+                self.status_var.set(t("alert_saved"))
+            self._save()
+            # 顯示成功訊息後關閉
+            messagebox.showinfo("提示", t("alert_saved"))
+            dlg.destroy()
+
+        btn_frame = tk.Frame(content, bg=colors["bg"])
+        btn_frame.pack(pady=12)
+        tk.Button(btn_frame, text=t("btn_save_alert"), command=_save_alert,
+                  bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text=t("btn_cancel_zh"), command=dlg.destroy,
+                  bg=colors["btn_bg"], fg=colors["btn_fg"], relief=tk.RAISED, bd=1).pack(side=tk.LEFT, padx=5)
+
+        dlg.bind("<Return>", lambda e: _save_alert())
         dlg.bind("<Escape>", lambda e: dlg.destroy())
 
     def _valid_ticker(self, ticker: str) -> bool:
@@ -914,11 +1475,52 @@ class WatchlistApp:
         data = {tk_sym: fetch_price(tk_sym) for tk_sym in sorted(tickers)}
         def _apply():
             self.price_data = {**self.price_data, **data}
+            self._check_price_alerts(data)
             self._refresh_items()
             self.btn_refresh.config(state=tk.NORMAL)
             self.btn_refresh_current.config(state=tk.NORMAL)
             self.status_var.set(f"更新完成 ({len(tickers)} 個標的，{_now_str()})")
         self.root.after(0, _apply)
+
+    def _check_price_alerts(self, price_data: dict):
+        """檢查價格是否觸發提醒"""
+        for ticker, pd_data in price_data.items():
+            if ticker not in PRICE_ALERTS:
+                continue
+            price = pd_data.get("price")
+            if price is None:
+                continue
+            alert = PRICE_ALERTS.get(ticker)
+            if not alert:
+                continue
+            # 檢查高價提醒（價格 >= 目標價時觸發）
+            high_target = alert.get("high")
+            if high_target and price >= high_target:
+                if not alert.get("high_triggered"):  # 未觸發過才通知
+                    alert["high_triggered"] = True
+                    self._send_alert_notification(ticker, price, high_target, "high")
+                    self._save()
+            # 檢查低價提醒（價格 <= 目標價時觸發）
+            low_target = alert.get("low")
+            if low_target and price <= low_target:
+                if not alert.get("low_triggered"):
+                    alert["low_triggered"] = True
+                    self._send_alert_notification(ticker, price, low_target, "low")
+                    self._save()
+
+    def _send_alert_notification(self, ticker: str, current_price: float, target_price: float, alert_type: str):
+        """發送價格提醒通知"""
+        price_str = _fmt_price(current_price)
+        target_str = _fmt_price(target_price)
+        name = next((it[2] for wl in self.watchlists.values() for it in wl if it[1] == ticker), ticker)
+        if alert_type == "high":
+            msg = t("alert_high_triggered").format(ticker=f"{ticker} ({name})", price=price_str, target=target_str)
+            title = "High Price Alert"
+        else:
+            msg = t("alert_low_triggered").format(ticker=f"{ticker} ({name})", price=price_str, target=target_str)
+            title = "Low Price Alert"
+        _send_windows_notification(title, msg)
+        self.root.after(0, lambda: self.status_var.set(msg))
 
 def main():
     root = tk.Tk()
