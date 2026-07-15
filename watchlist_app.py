@@ -131,6 +131,24 @@ LANG = {
     "tab_fundamental":{"zh-TW":"基本面","zh-CN":"基本面","en":"Fundamental","ja":"ファンダ","ko":"펀더","es":"Fundamental"},
     "tab_technical":{"zh-TW":"技術面","zh-CN":"技术面","en":"Technical","ja":"テクニカル","ko":"기술","es":"Técnico"},
  "tab_categorized":{"zh-TW":"分類分析","zh-CN":"分類指标","en":"Categorized Analysis","ja":"分類分析","ko":"분류분석","es":"Análisis Categorizado"},
+    "cat_valuation":{"zh-TW":"估值指標","zh-CN":"估值指标","en":"Valuation","ja":"估值指標","ko":"주가평가","es":"Valoración"},
+    "cat_profitability":{"zh-TW":"獲利指標","zh-CN":"获利指标","en":"Profitability","ja":"収益性","ko":"수익성","es":"Rentabilidad"},
+    "cat_yield_risk":{"zh-TW":"殖利率與風險","zh-CN":"殖利率与风险","en":"Yield & Risk","ja":"配当・リスク","ko":"수익률·위험","es":"Rendimiento y Riesgo"},
+    "cat_analyst_holdings":{"zh-TW":"分析師與持股","zh-CN":"分析师与持股","en":"Analyst & Holdings","ja":"アナリスト・保有率","ko":"애널리스트·보유율","es":"Analista y Tenencias"},
+    "cat_52w_range":{"zh-TW":"52週區間","zh-CN":"52周区间","en":"52W Range","ja":"52週レンジ","ko":"52주 범위","es":"Rango 52S"},
+    "metric_52w_range_pos":{"zh-TW":"區間位置","zh-CN":"区间位置","en":"Range Position","ja":"レンジ位置","ko":"범위위치","es":"Posición Rango"},
+    "cat_cashflow":{"zh-TW":"現金流","zh-CN":"现金流","en":"Cash Flow","ja":"キャッシュフロー","ko":"현금흐름","es":"Flujo de Caja"},
+    "cat_growth":{"zh-TW":"營收與成長","zh-CN":"营收与成长","en":"Revenue & Growth","ja":"売上・成長","ko":"매출·성장","es":"Ingresos y Crecimiento"},
+    "metric_operating_cashflow":{"zh-TW":"營業現金流","zh-CN":"营业现金流","en":"Op. Cash Flow","ja":"営業CF","ko":"영업CF","es":"CF Operativo"},
+    "metric_total_revenue":{"zh-TW":"總營收","zh-CN":"总营收","en":"Total Revenue","ja":"総売上","ko":"총매출","es":"Ingresos Totales"},
+    "metric_total_liabilities":{"zh-TW":"總負債","zh-CN":"总负债","en":"Total Liabilities","ja":"総負債","ko":"총부채","es":"Pasivos Totales"},
+    "metric_total_cash":{"zh-TW":"總現金","zh-CN":"总现金","en":"Total Cash","ja":"総現金","ko":"총현금","es":"Efectivo Total"},
+    "metric_earnings_growth":{"zh-TW":"盈餘成長率","zh-CN":"盈余成长率","en":"Earnings Growth","ja":"的利益成長率","ko":"이익성장률","es":"Crec. Ganancias"},
+    "metric_revenue_growth":{"zh-TW":"營收成長率","zh-CN":"营收成长率","en":"Revenue Growth","ja":"売上成長率","ko":"매출성장률","es":"Crec. Ingresos"},
+    "metric_debt_equity":{"zh-TW":"債務權益比","zh-CN":"负债权益比","en":"Debt/Equity","ja":"DE比","ko":"부채비율","es":"Deuda/Capital"},
+    "metric_current_price":{"zh-TW":"現價","zh-CN":"现价","en":"Price","ja":"現在値","ko":"현재가","es":"Precio"},
+    "metric_price_change":{"zh-TW":"漲跌","zh-CN":"涨跌","en":"Change","ja":"前日比","ko":"등락","es":"Cambio"},
+    "metric_price_pct":{"zh-TW":"漲跌幅","zh-CN":"涨跌幅","en":"% Chg","ja":"騰落率","ko":"등락률","es":"% Var"},
     "metric_company_name":{"zh-TW":"公司名稱","zh-CN":"公司名称","en":"Company","ja":"会社名","ko":"회사명","es":"Empresa"},
     "metric_market_cap":{"zh-TW":"市值","zh-CN":"市值","en":"Market Cap","ja":"時価総額","ko":"시가총액","es":"Cap. Mercado"},
     "metric_eps":{"zh-TW":"每股盈餘","zh-CN":"每股收益","en":"EPS","ja":"EPS","ko":"EPS","es":"EPS"},
@@ -207,9 +225,10 @@ CURRENT_THEME = "system"
 CURRENT_FONT_FAMILY = ["微軟正黑體"]
 CURRENT_FONT_SIZE = [13]
 
-def get_font(size: int = None) -> tuple:
+def get_font(size: int = None, bold: bool = False) -> tuple:
     """Return font tuple using current font family and size."""
-    return (CURRENT_FONT_FAMILY[0], size or CURRENT_FONT_SIZE[0])
+    weight = "bold" if bold else "normal"
+    return (CURRENT_FONT_FAMILY[0], size or CURRENT_FONT_SIZE[0], weight)
 
 def get_installed_fonts() -> list[str]:
     """Get list of commonly available Chinese/Unicode fonts on Windows."""
@@ -449,6 +468,38 @@ def apply_theme(root, style):
 
 class FundamentalAnalysisWindow:
     """基本面分析視窗：顯示估值與財務指標"""
+
+    # 分類定義：每個分類包含哪些指標key（使用翻譯後的key）
+    CATEGORY_METRICS = {
+        "cat_valuation": [
+            "metric_market_cap", "metric_trailing_pe", "metric_forward_pe",
+            "metric_peg", "metric_price_book", "metric_ev_ebitda",
+        ],
+        "cat_profitability": [
+            "metric_eps", "metric_roe", "metric_roa", "metric_roic",
+            "metric_op_margin", "metric_profit_margin",
+        ],
+        "cat_yield_risk": [
+            "metric_dividend_yield", "metric_beta", "metric_fcf_yield",
+            "metric_quick_ratio", "metric_short_pct",
+        ],
+        "cat_analyst_holdings": [
+            "metric_target_mean", "metric_target_median", "metric_analyst_count",
+            "metric_rec_mean", "metric_insider_pct", "metric_inst_pct",
+        ],
+        "cat_52w_range": [
+            "metric_52w_high", "metric_52w_low", "metric_52w_range_pos",
+        ],
+        "cat_cashflow": [
+            "metric_fcf", "metric_operating_cashflow", "metric_fcf_yield",
+            "metric_fcf_coverage", "metric_roic",
+        ],
+        "cat_growth": [
+            "metric_total_revenue", "metric_total_liabilities", "metric_total_cash",
+            "metric_earnings_growth", "metric_revenue_growth",
+        ],
+    }
+
     def __init__(self, parent, ticker, name, theme_mode="light"):
         self.ticker = ticker
         self.name = name
@@ -456,16 +507,16 @@ class FundamentalAnalysisWindow:
 
         self.win = tk.Toplevel(parent)
         self.win.title(f"{ticker} - {name} - {t('fundamental_title')}")
-        # 長寬高分別增加
-        self.win.geometry("1400x680")
+        # Height increased for categorized analysis tab
+        self.win.geometry("1400x900")
         self.win.transient(parent)
-        self.win.minsize(1000, 550)
+        self.win.minsize(1000, 700)
 
         # Center window on screen
         self.win.update_idletasks()
         sw = self.win.winfo_screenwidth()
         sh = self.win.winfo_screenheight()
-        w, h = 1400, 680
+        w, h = 1400, 900
         x = (sw - w) // 2
         y = (sh - h) // 2
         self.win.geometry(f"{w}x{h}+{x}+{y}")
@@ -518,6 +569,29 @@ class FundamentalAnalysisWindow:
 
         self._fig_frame = ttk.Frame(tech_frame)
         self._fig_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+
+        # === Categorized Analysis Tab ===
+        cat_frame = ttk.Frame(nb)
+        nb.add(cat_frame, text=t("tab_categorized"))
+
+        # Canvas with scrollbar for categorized tab
+        cat_canvas = tk.Canvas(cat_frame, bg=self._bg(), highlightthickness=0)
+        cat_scrollbar = ttk.Scrollbar(cat_frame, orient=tk.VERTICAL, command=cat_canvas.yview)
+        cat_scroll_frame = tk.Frame(cat_canvas, bg=self._bg())
+
+        cat_scroll_frame.bind(
+            "<Configure>",
+            lambda e: cat_canvas.configure(scrollregion=cat_canvas.bbox("all"))
+        )
+        cat_canvas.create_window((0, 0), window=cat_scroll_frame, anchor=tk.NW)
+        cat_canvas.configure(yscrollcommand=cat_scrollbar.set)
+
+        cat_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        cat_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        cat_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self._cat_canvas = cat_canvas
+        self._cat_scroll_frame = cat_scroll_frame
 
         # Load fundamental data
         self._load_fundamental()
@@ -725,8 +799,41 @@ class FundamentalAnalysisWindow:
                     fcf_yield = (fcf / market_cap * 100) if market_cap > 0 else None
                     # FCF Dividend Coverage
                     fcf_coverage = (fcf / dividend_payout) if dividend_payout > 0 else None
+                    # Operating Cash Flow
+                    op_cashflow = get_df_value(cashflow, ["Operating Cash Flow"])
+                    # Total Liabilities
+                    total_liabilities = get_df_value(balancesheet, ["Total Liabilities Net Minority Interest"])
                 except Exception:
-                    roic, fcf_yield, fcf_coverage = None, None, None
+                    roic, fcf_yield, fcf_coverage, op_cashflow, total_liabilities = None, None, None, None, None
+
+                # Get current price info from info dict
+                current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+                prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose")
+                if current_price and prev_close:
+                    price_change = current_price - prev_close
+                    price_pct = (price_change / prev_close * 100)
+                else:
+                    price_change = 0
+                    price_pct = 0
+
+                # Calculate 52W range position
+                w52_high = info.get("fiftyTwoWeekHigh")
+                w52_low = info.get("fiftyTwoWeekLow")
+                if current_price and w52_high and w52_low and w52_high > w52_low:
+                    range_pos = ((current_price - w52_low) / (w52_high - w52_low)) * 100
+                else:
+                    range_pos = None
+
+                # Store for categorized tab
+                self._stock_card_data = {
+                    "current_price": current_price,
+                    "price_change": price_change,
+                    "price_pct": price_pct,
+                    "company_name": info.get("longName") or info.get("shortName") or self.ticker,
+                    "w52_high": w52_high,
+                    "w52_low": w52_low,
+                    "range_pos": range_pos,
+                }
 
                 metrics = {
                     t("metric_company_name"): info.get("longName") or info.get("shortName") or self.ticker,
@@ -742,6 +849,7 @@ class FundamentalAnalysisWindow:
                     t("metric_op_margin"): self._fmt_pct(info.get("operatingMargins")),
                     t("metric_profit_margin"): self._fmt_pct(info.get("profitMargins")),
                     t("metric_fcf"): self._fmt_money(info.get("freeCashflow")),
+                    t("metric_operating_cashflow"): self._fmt_money(op_cashflow),
                     t("metric_quick_ratio"): self._fmt_number(info.get("quickRatio")),
                     t("metric_target_mean"): self._fmt_price(info.get("targetMeanPrice")),
                     t("metric_target_median"): self._fmt_price(info.get("targetMedianPrice")),
@@ -757,9 +865,20 @@ class FundamentalAnalysisWindow:
                     t("metric_roic"): self._fmt_pct2(roic) if roic else "N/A",
                     t("metric_ev_ebitda"): self._fmt_number(info.get("enterpriseToEbitda")),
                     t("metric_dividend_yield"): self._fmt_yield(info.get("dividendYield")),
+                    # Growth metrics
+                    t("metric_total_revenue"): self._fmt_money(info.get("totalRevenue")),
+                    t("metric_total_liabilities"): self._fmt_money(total_liabilities),
+                    t("metric_total_cash"): self._fmt_money(info.get("totalCash")),
+                    t("metric_earnings_growth"): self._fmt_pct(info.get("earningsGrowth")),
+                    t("metric_revenue_growth"): self._fmt_pct(info.get("revenueGrowth")),
+                    t("metric_52w_range_pos"): self._fmt_pct2(range_pos) if range_pos is not None else "N/A",
                 }
 
-                self.win.after(0, lambda: self._display_metrics(metrics))
+                # Store raw metrics for categorized tab
+                self._metrics_raw = metrics
+
+                self.win.after(0, lambda m=metrics: self._display_metrics(m))
+                self.win.after(0, lambda: self._display_categorized())
             except Exception as e:
                 self.win.after(0, lambda: self._show_error(str(e)))
 
@@ -899,6 +1018,205 @@ class FundamentalAnalysisWindow:
         # Update scroll region
         self._scroll_frame.update_idletasks()
         self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+
+    def _display_categorized(self):
+        """Display categorized analysis in the categorized tab"""
+        parent = self._cat_scroll_frame
+        parent.update()
+
+        is_dark = (self.theme_mode == "dark")
+        bg = self._bg()
+        fg = self._fg()
+        card_bg = "#2a2a2a" if is_dark else "#f5f5f5"
+        card_border = "#4a4a4a" if is_dark else "#cccccc"
+        header_bg = "#333333" if is_dark else "#e0e0e0"
+        pos_color = self._positive_color()
+        neg_color = self._negative_color()
+
+        sc = getattr(self, "_stock_card_data", None)
+
+        # === Stock Info Card ===
+        stock_card = tk.Frame(parent, bg=card_bg, relief=tk.RIDGE, bd=1)
+        stock_card.pack(fill=tk.X, padx=10, pady=(10, 8))
+
+        inner = tk.Frame(stock_card, bg=card_bg)
+        inner.pack(fill=tk.X, padx=15, pady=12)
+
+        # Company name - 23pt bold
+        company_name = sc["company_name"] if sc else self.ticker
+        tk.Label(inner, text=company_name, font=get_font(23, bold=True),
+                 bg=card_bg, fg=fg).pack(anchor=tk.W)
+
+        # Separator
+        sep = tk.Frame(inner, height=2, bg=fg)
+        sep.pack(fill=tk.X, pady=8)
+
+        # Price info - 19pt
+        if sc:
+            cp = sc["current_price"]
+            chg = sc["price_change"]
+            pct = sc["price_pct"]
+            price_str = f"${cp:.2f}" if cp else "N/A"
+            chg_str = f"{chg:+.2f}" if chg else "N/A"
+            pct_str = f"{pct:+.2f}%" if pct else "N/A"
+            chg_color = pos_color if chg >= 0 else neg_color
+        else:
+            price_str = "N/A"
+            chg_str = "N/A"
+            pct_str = "N/A"
+            chg_color = fg
+
+        tk.Label(inner, text=f"現價: {price_str}", font=get_font(19),
+                 bg=card_bg, fg=fg).pack(anchor=tk.W)
+        tk.Label(inner, text=f"漲跌: {chg_str}  ({pct_str})", font=get_font(19),
+                 bg=card_bg, fg=chg_color).pack(anchor=tk.W)
+
+        # === Category Cards in 3-column layout ===
+        category_order = [
+            "cat_valuation",
+            "cat_profitability",
+            "cat_yield_risk",
+            "cat_analyst_holdings",
+            "cat_52w_range",
+            "cat_cashflow",
+            "cat_growth",
+        ]
+
+        # Build category data
+        cat_data = []
+        for cat_key in category_order:
+            cat_lbl = t(cat_key)
+            metric_keys = self.CATEGORY_METRICS.get(cat_key, [])
+            cat_metrics = self._get_categorized_metrics(metric_keys)
+            cat_data.append((cat_lbl, cat_metrics))
+
+        # Create 2-column container
+        cols = 2
+        col_frames = []
+        for i in range(cols):
+            cf = tk.Frame(parent, bg=bg)
+            cf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+            col_frames.append(cf)
+
+        # Distribute categories across columns (col1: 4 cards, col2: 3 cards)
+        rows_per_col = (len(cat_data) + cols - 1) // cols
+        for idx, (cat_name, cat_metrics) in enumerate(cat_data):
+            col_idx = idx // rows_per_col
+            if col_idx >= cols:
+                col_idx = cols - 1
+
+            self._render_category_card(col_frames[col_idx], cat_name, cat_metrics,
+                                        card_bg, card_border, header_bg, fg,
+                                        pos_color, neg_color, vertical_pad=12)
+
+        # 驗證：確保7個卡片都渲染
+        assert len(cat_data) == 7, f"應有7個卡片，實際{len(cat_data)}個"
+
+        # Update scroll region
+        self._cat_scroll_frame.update_idletasks()
+        self._cat_canvas.configure(scrollregion=self._cat_canvas.bbox("all"))
+
+    def _get_categorized_metrics(self, metric_keys: list) -> list:
+        """Build list of (label, value, is_positive) for given metric keys"""
+        metrics_raw = getattr(self, "_metrics_raw", {})
+
+        pct_positive_keys = {
+            "metric_roe", "metric_roa", "metric_roic",
+            "metric_op_margin", "metric_profit_margin",
+            "metric_fcf_yield", "metric_dividend_yield",
+            "metric_earnings_growth", "metric_revenue_growth",
+        }
+        no_color_keys = {
+            "metric_market_cap", "metric_fcf", "metric_operating_cashflow",
+            "metric_total_revenue", "metric_total_liabilities", "metric_total_cash",
+            "metric_target_mean", "metric_target_median",
+            "metric_52w_high", "metric_52w_low",
+        }
+
+        result = []
+        for key in metric_keys:
+            trans_key = t(key)
+            val = metrics_raw.get(trans_key, "N/A")
+
+            if key in pct_positive_keys:
+                is_pos = self._is_positive_pct(val)
+            elif key in no_color_keys:
+                is_pos = None
+            else:
+                is_pos = None
+
+            result.append((trans_key, val, is_pos))
+
+        return result
+
+    def _is_positive_pct(self, val) -> bool | None:
+        """Returns True if val is a positive percentage, False if negative, None if N/A"""
+        if val == "N/A" or val is None:
+            return None
+        try:
+            return float(str(val).rstrip("%")) > 0
+        except (ValueError, AttributeError):
+            return None
+
+    def _render_category_card(self, parent, cat_name, metrics: list,
+                               card_bg, card_border, header_bg, fg,
+                               pos_color, neg_color, vertical_pad=12):
+        """Render one category card with header and 3-column metric layout"""
+        # Card wrapper with border
+        card = tk.Frame(parent, bg=card_border, relief=tk.FLAT, bd=0)
+        card.pack(fill=tk.X, padx=10, pady=vertical_pad)
+
+        inner = tk.Frame(card, bg=card_bg)
+        inner.pack(fill=tk.X, padx=1, pady=1)
+
+        # Category header - 16pt bold
+        hdr = tk.Frame(inner, bg=header_bg)
+        hdr.pack(fill=tk.X)
+        tk.Label(hdr, text=cat_name, font=get_font(16, bold=True),
+                 bg=header_bg, fg=fg, anchor=tk.W,
+                 padx=10, pady=5).pack(fill=tk.X)
+
+        # Distribute metrics across 3 columns
+        n = len(metrics)
+        if n == 0:
+            return
+
+        # Create 3-column grid
+        cols = 3
+        rows_needed = (n + cols - 1) // cols
+
+        grid_frame = tk.Frame(inner, bg=card_bg)
+        grid_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        col_frames = []
+        for i in range(cols):
+            cf = tk.Frame(grid_frame, bg=card_bg)
+            cf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+            col_frames.append(cf)
+
+        for idx, (label, value, is_pos) in enumerate(metrics):
+            col_idx = (idx // rows_needed) % cols
+            row_idx = idx % rows_needed
+
+            # Build row frame
+            row = tk.Frame(col_frames[col_idx], bg=card_bg)
+            row.pack(fill=tk.X, pady=2)
+
+            # Determine value color
+            if is_pos is True:
+                val_color = pos_color
+            elif is_pos is False:
+                val_color = neg_color
+            else:
+                val_color = fg
+
+            # Label - 14pt like fundamental tab
+            tk.Label(row, text=label, font=get_font(14),
+                     bg=card_bg, fg=fg, anchor=tk.W).pack(side=tk.LEFT)
+
+            # Value - 14pt
+            tk.Label(row, text=value, font=get_font(14),
+                     bg=card_bg, fg=val_color, anchor=tk.E).pack(side=tk.RIGHT)
 
     def _show_error(self, msg: str):
         error_lbl = tk.Label(self._scroll_frame, text=f"載入失敗: {msg}",
